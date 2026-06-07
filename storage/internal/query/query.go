@@ -1,0 +1,154 @@
+package query
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"mrsydar/tagbase/storage/internal/cursor"
+	"mrsydar/tagbase/storage/internal/db"
+	"mrsydar/tagbase/storage/internal/models"
+	"mrsydar/tagbase/storage/pkg/client"
+)
+
+// Runner executes tag queries.
+type Runner struct {
+	db     *db.DB
+	client client.Tagger
+}
+
+// NewRunner creates a new query runner.
+func NewRunner(database *db.DB, client client.Tagger) *Runner {
+	return &Runner{db: database, client: client}
+}
+
+// Query executes a tag query.
+func (r *Runner) Query(ctx context.Context, collection *models.Collection, req models.TagsQueryRequest) (*models.TagsQueryResponse, error) {
+	var cursorDate time.Time
+	var cursorID string
+	if req.Cursor != "" {
+		var err error
+		cursorDate, cursorID, err = cursor.Decode(req.Cursor)
+		if err != nil {
+			return nil, fmt.Errorf("invalid cursor: %w", err)
+		}
+	}
+
+	targetLimit := req.Limit + 1
+
+	// No tag filtering: return by date only.
+	if len(req.Tags) == 0 {
+		objs, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, cursorDate, cursorID, targetLimit)
+		if err != nil {
+			return nil, fmt.Errorf("query by date: %w", err)
+		}
+		return buildResponse(objs, req.Limit)
+	}
+
+	results := make([]models.Object, 0, targetLimit)
+	scanCursorDate := cursorDate
+	scanCursorID := cursorID
+
+	batchSize := req.Limit*5 + 100
+	if batchSize < 200 {
+		batchSize = 200
+	}
+
+	for len(results) < targetLimit {
+		candidates, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, scanCursorDate, scanCursorID, batchSize)
+		if err != nil {
+			return nil, fmt.Errorf("scan candidates: %w", err)
+		}
+		if len(candidates) == 0 {
+			break
+		}
+
+		candidateIDs := make([]string, len(candidates))
+		for i, c := range candidates {
+			candidateIDs[i] = c.ID
+		}
+		knownTags, err := r.db.GetKnownTagsForObjects(ctx, candidateIDs)
+		if err != nil {
+			return nil, fmt.Errorf("get known tags: %w", err)
+		}
+
+		for _, cand := range candidates {
+			if len(results) >= targetLimit {
+				break
+			}
+			objKnown := knownTags[cand.ID]
+			contradicts := false
+			for tag, wanted := range req.Tags {
+				if val, has := objKnown[tag]; has && val != wanted {
+					contradicts = true
+					break
+				}
+			}
+			if contradicts {
+				continue
+			}
+
+			var missing []string
+			for tag := range req.Tags {
+				if _, has := objKnown[tag]; !has {
+					missing = append(missing, tag)
+				}
+			}
+			if len(missing) > 0 {
+				resp, err := r.client.Tag(ctx, collection.Name, cand.ID, missing)
+				if err != nil {
+					return nil, fmt.Errorf("tag engine error: %w", err)
+				}
+				if err := r.db.UpsertTags(ctx, collection.ID, cand.ID, resp); err != nil {
+					return nil, fmt.Errorf("persist tags: %w", err)
+				}
+				if objKnown == nil {
+					objKnown = map[string]bool{}
+				}
+				for k, v := range resp {
+					objKnown[k] = v
+				}
+			}
+
+			matches := true
+			for tag, wanted := range req.Tags {
+				val, has := objKnown[tag]
+				if !has {
+					matches = false
+					break
+				}
+				if val != wanted {
+					matches = false
+					break
+				}
+			}
+			if !matches {
+				continue
+			}
+			cand.Tags = req.Tags
+			results = append(results, cand)
+		}
+
+		last := candidates[len(candidates)-1]
+		scanCursorDate = last.Date
+		scanCursorID = last.ID
+	}
+
+	return buildResponse(results, req.Limit)
+}
+
+func buildResponse(results []models.Object, limit int) (*models.TagsQueryResponse, error) {
+	hasMore := len(results) > limit
+	if hasMore {
+		results = results[:limit]
+	}
+	resp := &models.TagsQueryResponse{
+		Objects: results,
+		HasMore: hasMore,
+	}
+	if len(results) > 0 {
+		last := results[len(results)-1]
+		resp.NextCursor = cursor.Encode(last.Date, last.ID)
+	}
+	return resp, nil
+}

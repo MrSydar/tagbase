@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS object_tags;
+DROP TABLE IF EXISTS objects;
+DROP TABLE IF EXISTS collections;

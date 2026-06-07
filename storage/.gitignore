@@ -1,0 +1,19 @@
+# Binaries
+/tagbase
+/storage
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Builds
+build/
+
+# Test binary
+*.test
+
+# Output of go coverage tool
+*.out
+
+# Go workspace file
+go.work
