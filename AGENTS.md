@@ -61,7 +61,16 @@ See `storage/cmd/client/main.go` for available commands.
 
 ## Testing
 
-There are currently no tests. `go test ./...` in either module returns nothing. Add tests in `*_test.go` files as usual — no special framework beyond standard Go.
+**Unit tests:** `storage/` and `tagger/` have none currently. Add `*_test.go` files as usual — standard Go only.
+
+**End-to-end tests:** In the `e2e/` directory (its own module, outside the workspace):
+
+```bash
+cd e2e
+GOWORK=off go test -v -count=1 .
+```
+
+Requires the Docker Compose stack running and `storage` readyz returning `200`.
 
 ## Important quirks
 
