@@ -73,6 +73,9 @@ func buildPrompt(text string, tags []string) string {
 	return fmt.Sprintf(
 		`Analyze the following text and determine which tags apply. Respond ONLY with a JSON object where each key is a tag and the value is true or false.
 
+Example response format:
+{"tag1": true, "tag2": false}
+
 Text:
 ---
 %s
