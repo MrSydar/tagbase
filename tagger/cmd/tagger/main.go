@@ -36,6 +36,17 @@ func main() {
 		ev = evaluator.NewGrepEvaluator()
 	case "false":
 		ev = evaluator.NewFalseEvaluator()
+	case "openai":
+		openaiAPIKey := os.Getenv("TAGGER_OPENAI_API_KEY")
+		openaiBaseURL := os.Getenv("TAGGER_OPENAI_BASE_URL")
+		if openaiBaseURL == "" {
+			openaiBaseURL = "https://api.openai.com/v1"
+		}
+		openaiModel := os.Getenv("TAGGER_OPENAI_MODEL")
+		if openaiModel == "" {
+			openaiModel = "gpt-4o-mini"
+		}
+		ev = evaluator.NewOpenAIEvaluator(openaiAPIKey, openaiBaseURL, openaiModel)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown evaluator implementation: %s\n", evaluatorImpl)
 		os.Exit(1)

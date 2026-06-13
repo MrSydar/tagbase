@@ -100,7 +100,12 @@ func (s *Server) tag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := s.evaluator.Evaluate(evaluator.DataType(meta.DataType), data, req.Tags)
+	result, err := s.evaluator.Evaluate(evaluator.DataType(meta.DataType), data, req.Tags)
+	if err != nil {
+		s.logger.Error("tagger: evaluation failed", zap.Error(err))
+		http.Error(w, `{"error":{"code":"evaluation_error","message":"tag evaluation failed"}}`, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tagResponse{Tags: result})
 }

@@ -12,19 +12,19 @@ func NewGrepEvaluator() *GrepEvaluator {
 
 // Evaluate returns true for a tag if the content (when dataType is txt) contains the tag as a substring.
 // For non-txt data types all tags evaluate to false.
-func (e *GrepEvaluator) Evaluate(dataType DataType, content []byte, tags []string) map[string]bool {
+func (e *GrepEvaluator) Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error) {
 	result := make(map[string]bool, len(tags))
 	if dataType != DataTypeTxt {
 		for _, tag := range tags {
 			result[tag] = false
 		}
-		return result
+		return result, nil
 	}
 	contentStr := string(content)
 	for _, tag := range tags {
 		result[tag] = strings.Contains(contentStr, tag)
 	}
-	return result
+	return result, nil
 }
 
 // GetSupportedDataTypes returns the data types supported by this evaluator.

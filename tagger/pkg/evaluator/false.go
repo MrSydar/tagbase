@@ -9,12 +9,12 @@ func NewFalseEvaluator() *FalseEvaluator {
 }
 
 // Evaluate returns false for all tags regardless of data type.
-func (e *FalseEvaluator) Evaluate(dataType DataType, content []byte, tags []string) map[string]bool {
+func (e *FalseEvaluator) Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error) {
 	result := make(map[string]bool, len(tags))
 	for _, tag := range tags {
 		result[tag] = false
 	}
-	return result
+	return result, nil
 }
 
 // GetSupportedDataTypes returns all supported data types.
