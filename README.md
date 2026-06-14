@@ -26,8 +26,8 @@ A storage system for collections of objects with sparse boolean tags evaluated o
 
 | Service | Module | Port | Role |
 |---------|--------|------|------|
-| [storage](storage/) | `mrsydar/tagbase/storage` | `:8080` | HTTP API for collections, objects, tag queries |
-| [tagger](tagger/) | `mrsydar/tagbase/tagger` | `:8081` | Evaluates tags by fetching object data from storage |
+| [storage](storage/) | `mrsydar/tagbase/storage` | `:8080` | HTTP API for collections, objects, tag queries, Prometheus metrics at `/metrics` |
+| [tagger](tagger/) | `mrsydar/tagbase/tagger` | `:8081` | Evaluates tags by fetching object data from storage, Prometheus metrics at `/metrics` |
 
 **Infra**
 
@@ -68,6 +68,10 @@ curl -s -X POST http://localhost:8080/v1/collections/jobs/objects/query \
 
 # 4. Inspect object tags directly
 curl -s "http://localhost:8080/v1/collections/jobs/objects/{id}/tags?tags=golang,qa"
+
+# 5. Check Prometheus metrics
+curl -s http://localhost:8080/metrics | grep storage_
+curl -s http://localhost:8081/metrics | grep tagger_
 ```
 
 ---

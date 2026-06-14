@@ -5,35 +5,43 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	storageclient "mrsydar/tagbase/storage/pkg/client"
+	"mrsydar/tagbase/tagger/internal/metrics"
 	"mrsydar/tagbase/tagger/pkg/evaluator"
 )
 
 // Server is the tagging engine HTTP server.
 type Server struct {
-	storage   *storageclient.Client
-	evaluator evaluator.Evaluator
+	storage       *storageclient.Client
+	evaluator     evaluator.Evaluator
+	evaluatorImpl string
 }
 
 // NewServer creates a new tagging engine server.
-func NewServer(storageClient *storageclient.Client, evaluator evaluator.Evaluator) *Server {
+func NewServer(storageClient *storageclient.Client, evaluator evaluator.Evaluator, evaluatorImpl string) *Server {
 	return &Server{
-		storage:   storageClient,
-		evaluator: evaluator,
+		storage:       storageClient,
+		evaluator:     evaluator,
+		evaluatorImpl: evaluatorImpl,
 	}
 }
 
 // Router builds the chi router.
 func (s *Server) Router() chi.Router {
 	r := chi.NewRouter()
+	r.Use(metrics.Middleware)
+
 	r.Get("/healthz", s.healthz)
 	r.Get("/readyz", s.readyz)
 	r.Get("/v1/supported-types", s.supportedTypes)
 	r.Post("/v1/tag", s.tag)
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 	return r
 }
 
@@ -98,7 +106,9 @@ func (s *Server) tag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	start := time.Now()
 	result, err := s.evaluator.Evaluate(evaluator.DataType(meta.DataType), data, req.Tags)
+	metrics.RecordEvaluatorLatency(s.evaluatorImpl, start)
 	if err != nil {
 		slog.Error("tagger: evaluation failed", "error", err)
 		http.Error(w, `{"error":{"code":"evaluation_error","message":"tag evaluation failed"}}`, http.StatusInternalServerError)

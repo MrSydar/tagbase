@@ -18,6 +18,7 @@ make docker-up
 ```
 
 - Postgres (`:5432`), MinIO (`:9000`, `:9001`), tagger (`:8081`), and storage (`:8080`) all come up.
+- Both services expose Prometheus metrics at `GET /metrics`.
 - Storage waits for tagger to be healthy before starting (`depends_on` with `condition: service_healthy`).
 - Storage fails fast on startup if it cannot fetch supported types from tagger.
 - Wait for healthy; then test via `README.md` Quick Start curl commands.
@@ -81,6 +82,9 @@ Requires the Docker Compose stack running and `storage` readyz returning `200`.
 - **Tagger dogfoods storage public API:** The tagger only talks to storage via the public `pkg/client` HTTP client (no internal APIs, no DB access). Storage's `readyz` checks DB + S3; tagger's `readyz` always returns 200.
 - **Startup ordering matters:** Storage must reach tagger on startup to fetch supported types. In Docker Compose this is enforced by `depends_on` + healthchecks. Running storage standalone without tagger causes a fatal error.
 - **Hash-based idempotency:** Object upload computes SHA-256 over raw bytes. Duplicate uploads in the same collection return the existing object; the newly uploaded S3 object is not retained.
+- **Prometheus metrics:** Both services expose metrics at `GET /metrics` via `github.com/prometheus/client_golang`.
+  - Storage metrics: `storage_requests_total`, `storage_errors_total`, `storage_tagger_latency_seconds`.
+  - Tagger metrics: `tagger_requests_total`, `tagger_errors_total`, `tagger_evaluator_latency_seconds`.
 - **Makefile available:** A root `Makefile` provides shortcuts for building, running Docker, and executing e2e tests. No CI or task runner setup yet.
 
 ## References

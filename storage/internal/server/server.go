@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"mrsydar/tagbase/storage/internal/config"
 	"mrsydar/tagbase/storage/internal/db"
+	"mrsydar/tagbase/storage/internal/metrics"
 	"mrsydar/tagbase/storage/internal/models"
 	"mrsydar/tagbase/storage/internal/query"
 	"mrsydar/tagbase/storage/internal/storage"
@@ -55,9 +57,11 @@ func (s *Server) SetSupportedTypes(types []string) {
 func (s *Server) Router() chi.Router {
 	r := chi.NewRouter()
 	r.Use(requestLogger())
+	r.Use(metrics.Middleware)
 
 	r.Get("/healthz", s.healthz)
 	r.Get("/readyz", s.readyz)
+	r.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	r.Get("/v1/collections", s.listCollections)
 	r.Post("/v1/collections", s.createCollection)

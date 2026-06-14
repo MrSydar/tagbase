@@ -57,7 +57,7 @@ func main() {
 	}
 
 	storageClient := storageclient.New(storageBaseURL)
-	srv := server.NewServer(storageClient, ev)
+	srv := server.NewServer(storageClient, ev, evaluatorImpl)
 
 	httpServer := &http.Server{
 		Addr:         httpAddr,

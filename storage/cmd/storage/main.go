@@ -19,6 +19,7 @@ import (
 	"mrsydar/tagbase/storage/internal/retention"
 	"mrsydar/tagbase/storage/internal/server"
 	"mrsydar/tagbase/storage/internal/storage"
+	"mrsydar/tagbase/storage/pkg/client"
 	taggerclient "mrsydar/tagbase/tagger/pkg/client"
 )
 
@@ -103,7 +104,8 @@ func main() {
 
 	slog.Debug("creating server")
 	database := db.New(pool)
-	srv := server.NewServer(cfg, database, store, tagClient)
+	instrumentedTagClient := client.NewInstrumentedTagger(tagClient)
+	srv := server.NewServer(cfg, database, store, instrumentedTagClient)
 	srv.SetSupportedTypes(supportedTypes)
 
 	// Retention sweeper.
