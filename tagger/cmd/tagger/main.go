@@ -31,7 +31,7 @@ func main() {
 	}
 	evaluatorImpl := os.Getenv("TAGGER_EVALUATOR_IMPL")
 	if evaluatorImpl == "" {
-		evaluatorImpl = "false"
+		evaluatorImpl = "grep"
 	}
 
 	var ev evaluator.Evaluator
