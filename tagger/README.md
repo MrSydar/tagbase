@@ -83,7 +83,11 @@ The storage service validates that `data_type` is in the supported-types set (re
 |---------|----------|---------|-------------|
 | `TAGGER_HTTP_ADDR` | No | `:8081` | HTTP listen address |
 | `TAGGER_STORAGE_BASE_URL` | Yes | `http://localhost:8080` | Base URL of the storage service to fetch objects from |
-| `TAGGER_EVALUATOR_IMPL` | No | `false` | Evaluator to use: `grep` or `false` |
+| `TAGGER_EVALUATOR_IMPL` | No | `false` | Evaluator to use: `grep`, `false`, or `openai` |
+| `TAGGER_OPENAI_API_KEY` | No | — | OpenAI API key (required when `TAGGER_EVALUATOR_IMPL=openai`) |
+| `TAGGER_OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
+| `TAGGER_OPENAI_MODEL` | No | `gpt-4o-mini` | Model name for chat completions |
+| `TAGGER_OPENAI_TIMEOUT` | No | `60s` | HTTP timeout for OpenAI API requests |
 
 ---
 

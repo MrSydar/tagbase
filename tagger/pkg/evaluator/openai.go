@@ -19,14 +19,14 @@ type OpenAIEvaluator struct {
 }
 
 // NewOpenAIEvaluator creates an evaluator backed by an OpenAI-compatible API.
-func NewOpenAIEvaluator(apiKey, baseURL, model string) *OpenAIEvaluator {
-	slog.Debug("NewOpenAIEvaluator called", "base_url", baseURL, "model", model)
+func NewOpenAIEvaluator(apiKey, baseURL, model string, timeout time.Duration) *OpenAIEvaluator {
+	slog.Debug("NewOpenAIEvaluator called", "base_url", baseURL, "model", model, "timeout", timeout)
 	return &OpenAIEvaluator{
 		apiKey:  apiKey,
 		baseURL: baseURL,
 		model:   model,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }

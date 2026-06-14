@@ -50,7 +50,16 @@ func main() {
 		if openaiModel == "" {
 			openaiModel = "gpt-4o-mini"
 		}
-		ev = evaluator.NewOpenAIEvaluator(openaiAPIKey, openaiBaseURL, openaiModel)
+		openaiTimeoutStr := os.Getenv("TAGGER_OPENAI_TIMEOUT")
+		openaiTimeout := 60 * time.Second
+		if openaiTimeoutStr != "" {
+			if d, err := time.ParseDuration(openaiTimeoutStr); err == nil {
+				openaiTimeout = d
+			} else {
+				slog.Warn("invalid TAGGER_OPENAI_TIMEOUT, using default", "default", openaiTimeout, "error", err)
+			}
+		}
+		ev = evaluator.NewOpenAIEvaluator(openaiAPIKey, openaiBaseURL, openaiModel, openaiTimeout)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown evaluator implementation: %s\n", evaluatorImpl)
 		os.Exit(1)
