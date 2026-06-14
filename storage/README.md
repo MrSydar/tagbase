@@ -142,6 +142,7 @@ If any requested tag is missing, the storage service invokes the tagging engine 
 | `TAGBASE_S3_SECRET_KEY` | Yes | — | S3 secret key |
 | `TAGBASE_S3_FORCE_PATH_STYLE` | No | `true` | Use path-style S3 URLs |
 | `TAGBASE_TAG_ENGINE_URL` | Yes | — | Tagging engine base URL |
+| `TAGBASE_TAG_ENGINE_TIMEOUT` | No | `30s` | Tagging engine HTTP request timeout |
 | `TAGBASE_DEFAULT_LIMIT` | No | `5` | Default query limit |
 | `TAGBASE_MAX_LIMIT` | No | `100` | Hard cap on query limit |
 | `TAGBASE_DEFAULT_TTL` | No | `0` | Default TTL in seconds or duration string (`0` = none) |

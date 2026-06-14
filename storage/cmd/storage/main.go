@@ -80,7 +80,7 @@ func main() {
 		slog.Error("TAGBASE_TAG_ENGINE_URL is required")
 		os.Exit(1)
 	}
-	tagClient := taggerclient.New(cfg.TagEngineURL)
+	tagClient := taggerclient.New(cfg.TagEngineURL, cfg.TagEngineTimeout)
 
 	// Fetch supported types with retries.
 	var supportedTypes []string

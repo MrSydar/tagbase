@@ -19,6 +19,7 @@ type Config struct {
 	S3SecretKey            string
 	S3ForcePathStyle       bool
 	TagEngineURL           string
+	TagEngineTimeout       time.Duration
 	DefaultLimit           int
 	MaxLimit               int
 	DefaultTTL             time.Duration
@@ -40,6 +41,7 @@ func Load(prefix string) (*Config, error) {
 		S3SecretKey:            os.Getenv(prefix + "S3_SECRET_KEY"),
 		S3ForcePathStyle:       true,
 		TagEngineURL:           os.Getenv(prefix + "TAG_ENGINE_URL"),
+		TagEngineTimeout:     30 * time.Second,
 		DefaultLimit:         5,
 		MaxLimit:             100,
 		DefaultTTL:           0,
@@ -50,6 +52,18 @@ func Load(prefix string) (*Config, error) {
 
 	if v := os.Getenv(prefix + "S3_FORCE_PATH_STYLE"); v != "" {
 		cfg.S3ForcePathStyle = v == "true" || v == "1"
+	}
+
+	if v := os.Getenv(prefix + "TAG_ENGINE_TIMEOUT"); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil {
+			cfg.TagEngineTimeout = time.Duration(sec) * time.Second
+		} else {
+			var err error
+			cfg.TagEngineTimeout, err = time.ParseDuration(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid TAG_ENGINE_TIMEOUT: %w", err)
+			}
+		}
 	}
 
 	if v := os.Getenv(prefix + "DEFAULT_LIMIT"); v != "" {

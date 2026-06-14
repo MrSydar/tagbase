@@ -21,11 +21,15 @@ type Client struct {
 var _ client.Tagger = (*Client)(nil)
 
 // New creates a new tag engine client.
-func New(baseURL string) *Client {
-	slog.Debug("tagger client New", "base_url", baseURL)
+// If timeout is zero or negative, it defaults to 30 seconds.
+func New(baseURL string, timeout time.Duration) *Client {
+	slog.Debug("tagger client New", "base_url", baseURL, "timeout", timeout)
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
 	return &Client{
 		baseURL: baseURL,
-		http:    &http.Client{Timeout: 5 * time.Second},
+		http:    &http.Client{Timeout: timeout},
 	}
 }
 
