@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -19,6 +20,7 @@ type OpenAIEvaluator struct {
 
 // NewOpenAIEvaluator creates an evaluator backed by an OpenAI-compatible API.
 func NewOpenAIEvaluator(apiKey, baseURL, model string) *OpenAIEvaluator {
+	slog.Debug("NewOpenAIEvaluator called", "base_url", baseURL, "model", model)
 	return &OpenAIEvaluator{
 		apiKey:  apiKey,
 		baseURL: baseURL,
@@ -32,8 +34,10 @@ func NewOpenAIEvaluator(apiKey, baseURL, model string) *OpenAIEvaluator {
 // Evaluate evaluates tags for the given content using an LLM.
 // For now, only txt data type is supported.
 func (e *OpenAIEvaluator) Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error) {
+	slog.Debug("OpenAIEvaluator.Evaluate", "data_type", dataType, "tags_count", len(tags))
 	result := make(map[string]bool, len(tags))
 	if dataType != DataTypeTxt {
+		slog.Debug("non-txt data type, returning false for all tags")
 		for _, tag := range tags {
 			result[tag] = false
 		}
@@ -41,6 +45,7 @@ func (e *OpenAIEvaluator) Evaluate(dataType DataType, content []byte, tags []str
 	}
 
 	if len(tags) == 0 {
+		slog.Debug("no tags provided, returning empty result")
 		return result, nil
 	}
 
@@ -59,6 +64,7 @@ func (e *OpenAIEvaluator) Evaluate(dataType DataType, content []byte, tags []str
 }
 
 func buildPrompt(text string, tags []string) string {
+	slog.Debug("buildPrompt called", "tags_count", len(tags))
 	t := make([]byte, 0, len(tags)*16)
 	t = append(t, '[')
 	for i, tag := range tags {
@@ -88,6 +94,7 @@ Tags: %s`,
 }
 
 func (e *OpenAIEvaluator) callChatCompletions(prompt string) ([]byte, error) {
+	slog.Debug("callChatCompletions called")
 	payload := map[string]any{
 		"model": e.model,
 		"messages": []map[string]string{
@@ -130,6 +137,7 @@ func (e *OpenAIEvaluator) callChatCompletions(prompt string) ([]byte, error) {
 }
 
 func parseTagResponse(respBody []byte, expectedTags []string) (map[string]bool, error) {
+	slog.Debug("parseTagResponse called", "expected_tags_count", len(expectedTags))
 	result := make(map[string]bool, len(expectedTags))
 	for _, tag := range expectedTags {
 		result[tag] = false
@@ -155,6 +163,7 @@ func parseTagResponse(respBody []byte, expectedTags []string) (map[string]bool, 
 	// Try to parse the content directly as JSON.
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
+		slog.Debug("failed to parse content as JSON, attempting fallback extraction")
 		// Fallback: extract the first JSON object from the text.
 		start := bytes.IndexByte([]byte(content), '{')
 		end := bytes.LastIndexByte([]byte(content), '}')
@@ -184,5 +193,6 @@ func parseTagResponse(respBody []byte, expectedTags []string) (map[string]bool, 
 
 // GetSupportedDataTypes returns the data types supported by this evaluator.
 func (e *OpenAIEvaluator) GetSupportedDataTypes() []string {
+	slog.Debug("OpenAIEvaluator.GetSupportedDataTypes called")
 	return []string{string(DataTypeTxt)}
 }

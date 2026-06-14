@@ -2,6 +2,7 @@ package validate
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ var collectionNameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
 
 // ValidateCollectionName checks if a collection name is valid.
 func ValidateCollectionName(name string) error {
+	slog.Debug("ValidateCollectionName", "name", name)
 	if !collectionNameRe.MatchString(name) {
 		return fmt.Errorf("collection name must be 1-64 chars, lowercase letters, digits, underscore, hyphen, starting with a letter")
 	}
@@ -22,6 +24,7 @@ func ValidateCollectionName(name string) error {
 
 // ValidateDataType checks if data type is in the supported set.
 func ValidateDataType(dataType string, supported []string) error {
+	slog.Debug("ValidateDataType", "dataType", dataType, "supportedCount", len(supported))
 	for _, s := range supported {
 		if s == dataType {
 			return nil
@@ -32,6 +35,7 @@ func ValidateDataType(dataType string, supported []string) error {
 
 // ValidateTag checks if a single tag is valid.
 func ValidateTag(tag string) error {
+	slog.Debug("ValidateTag", "tag", tag)
 	if len(tag) == 0 {
 		return fmt.Errorf("tag cannot be empty")
 	}
@@ -47,6 +51,7 @@ func ValidateTag(tag string) error {
 
 // ValidateTags checks all tags.
 func ValidateTags(tags map[string]bool, maxCount int) error {
+	slog.Debug("ValidateTags", "tagCount", len(tags), "maxCount", maxCount)
 	if len(tags) > maxCount {
 		return fmt.Errorf("too many tags in query: %d > %d", len(tags), maxCount)
 	}
@@ -60,6 +65,7 @@ func ValidateTags(tags map[string]bool, maxCount int) error {
 
 // ValidateDateFilter checks the date filter shape.
 func ValidateDateFilter(df *models.DateFilter) error {
+	slog.Debug("ValidateDateFilter: called")
 	if df == nil {
 		return nil
 	}
@@ -74,6 +80,7 @@ func ValidateDateFilter(df *models.DateFilter) error {
 
 // ParseDateFilterFromMap parses a date filter from a map (used when parsing JSON with raw values).
 func ParseDateFilterFromMap(m map[string]string) (*models.DateFilter, error) {
+	slog.Debug("ParseDateFilterFromMap", "mapSize", len(m))
 	if len(m) == 0 {
 		return nil, nil
 	}

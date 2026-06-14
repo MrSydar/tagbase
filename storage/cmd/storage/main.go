@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
 
 	"mrsydar/tagbase/storage/internal/config"
 	"mrsydar/tagbase/storage/internal/db"
@@ -23,40 +23,51 @@ import (
 )
 
 func main() {
+	programLevel := new(slog.LevelVar)
+	programLevel.Set(slog.LevelDebug)
+	h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: programLevel})
+	slog.SetDefault(slog.New(h))
+
 	cfg, err := config.Load("TAGBASE_")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
 		os.Exit(1)
 	}
 
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	slog.Debug("starting tagbase storage service")
 
 	// Postgres.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	pool, err := pgxpool.New(ctx, cfg.PGDSN)
 	cancel()
 	if err != nil {
-		logger.Fatal("pgx pool error", zap.Error(err))
+		slog.Error("pgx pool error", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
 	// Run migrations.
+	slog.Debug("running migrations")
 	if err := runMigrations(pool); err != nil {
-		logger.Fatal("migrations failed", zap.Error(err))
+		slog.Error("migrations failed", "error", err)
+		os.Exit(1)
 	}
 
 	// S3.
+	slog.Debug("initializing S3 store", "bucket", cfg.S3Bucket, "endpoint", cfg.S3Endpoint)
 	store, err := storage.NewS3Store(cfg.S3Endpoint, cfg.S3Region, cfg.S3Bucket, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3ForcePathStyle)
 	if err != nil {
-		logger.Fatal("s3 store error", zap.Error(err))
+		slog.Error("s3 store error", "error", err)
+		os.Exit(1)
 	}
 	for i := 0; i < 10; i++ {
+		slog.Debug("ensuring S3 bucket exists", "attempt", i+1)
 		if err := store.EnsureBucket(context.Background()); err != nil {
 			if i == 9 {
-				logger.Fatal("ensure bucket failed after retries", zap.Error(err))
+				slog.Error("ensure bucket failed after retries", "error", err)
+				os.Exit(1)
 			}
-			logger.Warn("ensure bucket failed, retrying", zap.Error(err), zap.Int("attempt", i+1))
+			slog.Warn("ensure bucket failed, retrying", "error", err, "attempt", i+1)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -64,14 +75,17 @@ func main() {
 	}
 
 	// Tag engine client.
+	slog.Debug("initializing tag engine client", "url", cfg.TagEngineURL)
 	if cfg.TagEngineURL == "" {
-		logger.Fatal("TAGBASE_TAG_ENGINE_URL is required")
+		slog.Error("TAGBASE_TAG_ENGINE_URL is required")
+		os.Exit(1)
 	}
 	tagClient := taggerclient.New(cfg.TagEngineURL)
 
 	// Fetch supported types with retries.
 	var supportedTypes []string
 	for i := 0; i < 10; i++ {
+		slog.Debug("fetching supported types from tagging engine", "attempt", i+1)
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
 		supportedTypes, err = tagClient.GetSupportedTypes(ctx)
 		cancel()
@@ -79,24 +93,28 @@ func main() {
 			break
 		}
 		if i == 9 {
-			logger.Fatal("failed to fetch supported types from tagging engine", zap.Error(err))
+			slog.Error("failed to fetch supported types from tagging engine", "error", err)
+			os.Exit(1)
 		}
-		logger.Warn("fetch supported types failed, retrying", zap.Error(err), zap.Int("attempt", i+1))
+		slog.Warn("fetch supported types failed, retrying", "error", err, "attempt", i+1)
 		time.Sleep(2 * time.Second)
 	}
-	logger.Info("supported data types", zap.Strings("types", supportedTypes))
+	slog.Info("supported data types", "types", supportedTypes)
 
+	slog.Debug("creating server")
 	database := db.New(pool)
-	srv := server.NewServer(cfg, database, store, tagClient, logger)
+	srv := server.NewServer(cfg, database, store, tagClient)
 	srv.SetSupportedTypes(supportedTypes)
 
 	// Retention sweeper.
-	sweeper := retention.NewSweeper(database, store, cfg.RetentionSweepInterval, logger)
+	slog.Debug("starting retention sweeper")
+	sweeper := retention.NewSweeper(database, store, cfg.RetentionSweepInterval)
 	sweeperCtx, sweeperCancel := context.WithCancel(context.Background())
 	go sweeper.Start(sweeperCtx)
 
 	// HTTP server.
 	httpAddr := cfg.HTTPAddr
+	slog.Debug("starting HTTP server", "addr", httpAddr)
 	httpServer := &http.Server{
 		Addr:         httpAddr,
 		Handler:      srv.Router(),
@@ -105,9 +123,10 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("starting tagbase server", zap.String("addr", httpAddr))
+		slog.Info("starting tagbase server", "addr", httpAddr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("http server error", zap.Error(err))
+			slog.Error("http server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -116,16 +135,17 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
-	logger.Info("shutting down")
+	slog.Info("shutting down")
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 
 	sweeperCancel()
 	httpServer.Shutdown(shutdownCtx)
-	logger.Info("shutdown complete")
+	slog.Info("shutdown complete")
 }
 
 func runMigrations(pool *pgxpool.Pool) error {
+	slog.Debug("executing migrations")
 	// Simple migration runner: execute all .up.sql files in migrations/.
 	// In production, use golang-migrate. For MVP, we assume schema is idempotent.
 	ctx := context.Background()

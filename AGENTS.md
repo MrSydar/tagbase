@@ -13,7 +13,8 @@ Tagbase is a Go monorepo with two workspace modules. It is simpler than it looks
 ## Running the full stack
 
 ```bash
-docker compose up --build
+make docker-up
+# or: docker compose up --build
 ```
 
 - Postgres (`:5432`), MinIO (`:9000`, `:9001`), tagger (`:8081`), and storage (`:8080`) all come up.
@@ -44,6 +45,7 @@ go run ./cmd/tagger
 **Build binaries:**
 
 ```bash
+make all              # builds bin/storage, bin/tagger, bin/tagbase-client
 cd storage && go build -o /tmp/storage ./cmd/storage
 cd tagger && go build -o /tmp/tagger ./cmd/tagger
 ```
@@ -53,6 +55,7 @@ cd tagger && go build -o /tmp/tagger ./cmd/tagger
 A reference CLI client exists in the storage module:
 
 ```bash
+make build-client     # builds bin/tagbase-client
 cd storage
 go run ./cmd/client --url http://localhost:8080 <command>
 ```
@@ -66,8 +69,8 @@ See `storage/cmd/client/main.go` for available commands.
 **End-to-end tests:** In the `e2e/` directory (its own module, outside the workspace):
 
 ```bash
-cd e2e
-GOWORK=off go test -v -count=1 .
+make e2e
+# or: cd e2e && GOWORK=off go test -v -count=1 .
 ```
 
 Requires the Docker Compose stack running and `storage` readyz returning `200`.
@@ -78,7 +81,7 @@ Requires the Docker Compose stack running and `storage` readyz returning `200`.
 - **Tagger dogfoods storage public API:** The tagger only talks to storage via the public `pkg/client` HTTP client (no internal APIs, no DB access). Storage's `readyz` checks DB + S3; tagger's `readyz` always returns 200.
 - **Startup ordering matters:** Storage must reach tagger on startup to fetch supported types. In Docker Compose this is enforced by `depends_on` + healthchecks. Running storage standalone without tagger causes a fatal error.
 - **Hash-based idempotency:** Object upload computes SHA-256 over raw bytes. Duplicate uploads in the same collection return the existing object; the newly uploaded S3 object is not retained.
-- **No CI, Makefile, or task runner:** Everything is command-line or Docker Compose. Do not assume a build script exists.
+- **Makefile available:** A root `Makefile` provides shortcuts for building, running Docker, and executing e2e tests. No CI or task runner setup yet.
 
 ## References
 

@@ -3,6 +3,7 @@ package cursor
 import (
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 // Encode creates a cursor from date and id.
 func Encode(date time.Time, id string) string {
+	slog.Debug("Encode", "date", date.Format(time.RFC3339), "id", id)
 	unixMillis := date.UnixNano() / 1_000_000
 	raw := fmt.Sprintf("%d|%s", unixMillis, id)
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
@@ -17,6 +19,7 @@ func Encode(date time.Time, id string) string {
 
 // Decode parses a cursor into date millis and id.
 func Decode(cursor string) (time.Time, string, error) {
+	slog.Debug("Decode", "cursor", cursor)
 	if cursor == "" {
 		return time.Time{}, "", fmt.Errorf("empty cursor")
 	}

@@ -18,14 +18,14 @@ const storageURL = "http://localhost:8080"
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type tagQueryReq struct {
-	Tags  map[string]bool `json:"tags,omitempty"`
-	Limit int             `json:"limit"`
+	Tags   map[string]bool `json:"tags,omitempty"`
+	Limit  int             `json:"limit"`
+	Cursor string          `json:"cursor,omitempty"`
 }
 
 type tagQueryResp struct {
-	Objects    []objMeta `json:"objects"`
-	HasMore    bool      `json:"has_more"`
-	NextCursor string    `json:"next_cursor,omitempty"`
+	Objects []objMeta `json:"objects"`
+	Next    string    `json:"next,omitempty"`
 }
 
 type objMeta struct {
@@ -38,10 +38,10 @@ type objMeta struct {
 }
 
 func TestEndToEnd(t *testing.T) {
-	coll := "e2e_test_scenario"
+	coll := fmt.Sprintf("e2e_end2end_%d", time.Now().UnixNano())
 
 	// 1. Create collection
-	createBody := []byte(`{"name":"` + coll + `","data_type":"txt"}`)
+	createBody := []byte(fmt.Sprintf(`{"name":"%s","data_type":"txt"}`, coll))
 	resp, err := http.Post(storageURL+"/v1/collections", "application/json", bytes.NewReader(createBody))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -101,6 +101,69 @@ func TestEndToEnd(t *testing.T) {
 	// 10. Query "c++" — nothing present
 	result = queryObjects(t, coll, tagQueryReq{Tags: map[string]bool{"c++": true}, Limit: 10})
 	assert.Empty(t, result.Objects)
+}
+
+func TestPagination(t *testing.T) {
+	coll := fmt.Sprintf("e2e_pagination_%d", time.Now().UnixNano())
+
+	// 1. Create collection
+	createBody := []byte(fmt.Sprintf(`{"name":"%s","data_type":"txt"}`, coll))
+	resp, err := http.Post(storageURL+"/v1/collections", "application/json", bytes.NewReader(createBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	resp.Body.Close()
+
+	defer func() {
+		req, _ := http.NewRequest("DELETE", storageURL+"/v1/collections/"+coll, nil)
+		r, _ := httpClient.Do(req)
+		if r != nil {
+			r.Body.Close()
+		}
+	}()
+
+	// 2. Upload 4 unique objects
+	payloads := [][]byte{
+		[]byte("object one"),
+		[]byte("object two"),
+		[]byte("object three"),
+		[]byte("object four"),
+	}
+	objs := make([]objMeta, len(payloads))
+	for i, p := range payloads {
+		objs[i] = uploadObject(t, coll, "txt", p)
+	}
+
+	// 3. Query page 1 with limit=2 (no tag filter -> all objects)
+	page1 := queryObjects(t, coll, tagQueryReq{Limit: 2})
+	require.Len(t, page1.Objects, 2, "page 1 should contain 2 objects")
+	require.NotEmpty(t, page1.Next, "page 1 should have a next cursor")
+
+	// 4. Query page 2 using cursor from page 1
+	page2 := queryObjects(t, coll, tagQueryReq{Limit: 2, Cursor: page1.Next})
+	require.Len(t, page2.Objects, 2, "page 2 should contain 2 objects")
+	require.Empty(t, page2.Next, "page 2 should not have a next cursor")
+
+	// 5. Verify all fetched objects are unique
+	allIDs := extractIDs(append(page1.Objects, page2.Objects...))
+	seen := make(map[string]struct{}, len(allIDs))
+	for _, id := range allIDs {
+		_, exists := seen[id]
+		require.False(t, exists, "duplicate object id found: %s", id)
+		seen[id] = struct{}{}
+	}
+	require.Len(t, seen, 4, "should have fetched 4 unique objects in total")
+
+	// 6. Ensure all uploaded objects were returned
+	for _, obj := range objs {
+		assert.Contains(t, allIDs, obj.ID, "uploaded object %s should be present in results", obj.ID)
+	}
+
+	// 7. Third page should return empty
+	if page2.Next != "" {
+		page3 := queryObjects(t, coll, tagQueryReq{Limit: 2, Cursor: page2.Next})
+		assert.Empty(t, page3.Objects, "page 3 should be empty")
+		assert.Empty(t, page3.Next, "page 3 should not have a next cursor")
+	}
 }
 
 func uploadObject(t *testing.T, collection, dataType string, data []byte) objMeta {

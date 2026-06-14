@@ -3,11 +3,11 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
-	"go.uber.org/zap"
 
 	storageclient "mrsydar/tagbase/storage/pkg/client"
 	"mrsydar/tagbase/tagger/pkg/evaluator"
@@ -16,15 +16,13 @@ import (
 // Server is the tagging engine HTTP server.
 type Server struct {
 	storage   *storageclient.Client
-	logger    *zap.Logger
 	evaluator evaluator.Evaluator
 }
 
 // NewServer creates a new tagging engine server.
-func NewServer(storageClient *storageclient.Client, evaluator evaluator.Evaluator, logger *zap.Logger) *Server {
+func NewServer(storageClient *storageclient.Client, evaluator evaluator.Evaluator) *Server {
 	return &Server{
 		storage:   storageClient,
-		logger:    logger,
 		evaluator: evaluator,
 	}
 }
@@ -87,7 +85,7 @@ func (s *Server) tag(w http.ResponseWriter, r *http.Request) {
 	// Fetch object metadata from storage service first.
 	meta, err := s.storage.GetObjectMetadata(r.Context(), req.Collection, req.ObjectID)
 	if err != nil {
-		s.logger.Error("tagger: fetch metadata failed", zap.Error(err))
+		slog.Error("tagger: fetch metadata failed", "error", err)
 		http.Error(w, `{"error":{"code":"storage_error","message":"failed to fetch metadata"}}`, http.StatusBadGateway)
 		return
 	}
@@ -95,14 +93,14 @@ func (s *Server) tag(w http.ResponseWriter, r *http.Request) {
 	// Fetch object data.
 	data, err := s.storage.GetObjectData(r.Context(), req.Collection, req.ObjectID)
 	if err != nil {
-		s.logger.Error("tagger: fetch data failed", zap.Error(err))
+		slog.Error("tagger: fetch data failed", "error", err)
 		http.Error(w, `{"error":{"code":"storage_error","message":"failed to fetch data"}}`, http.StatusBadGateway)
 		return
 	}
 
 	result, err := s.evaluator.Evaluate(evaluator.DataType(meta.DataType), data, req.Tags)
 	if err != nil {
-		s.logger.Error("tagger: evaluation failed", zap.Error(err))
+		slog.Error("tagger: evaluation failed", "error", err)
 		http.Error(w, `{"error":{"code":"evaluation_error","message":"tag evaluation failed"}}`, http.StatusInternalServerError)
 		return
 	}
@@ -122,4 +120,3 @@ func validateTag(tag string) error {
 	}
 	return nil
 }
-

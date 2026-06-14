@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -21,6 +22,7 @@ var _ client.Tagger = (*Client)(nil)
 
 // New creates a new tag engine client.
 func New(baseURL string) *Client {
+	slog.Debug("tagger client New", "base_url", baseURL)
 	return &Client{
 		baseURL: baseURL,
 		http:    &http.Client{Timeout: 5 * time.Second},
@@ -46,6 +48,7 @@ type tagResponse struct {
 
 // GetSupportedTypes fetches supported data types from the tagging engine.
 func (c *Client) GetSupportedTypes(ctx context.Context) ([]string, error) {
+	slog.Debug("tagger client GetSupportedTypes")
 	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/v1/supported-types", nil)
 	if err != nil {
 		return nil, err
@@ -67,6 +70,7 @@ func (c *Client) GetSupportedTypes(ctx context.Context) ([]string, error) {
 
 // Tag requests tag evaluation for an object with retries and exponential backoff.
 func (c *Client) Tag(ctx context.Context, collection, objectID string, tags []string) (map[string]bool, error) {
+	slog.Debug("tagger client Tag", "collection", collection, "object_id", objectID, "tags_count", len(tags))
 	payload := tagRequest{
 		Collection: collection,
 		ObjectID:   objectID,
@@ -79,6 +83,7 @@ func (c *Client) Tag(ctx context.Context, collection, objectID string, tags []st
 
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
+		slog.Debug("tagger client Tag attempt", "attempt", attempt)
 		if attempt > 0 {
 			delay := time.Duration(200*(1<<attempt)) * time.Millisecond
 			if delay > 800*time.Millisecond {

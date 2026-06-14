@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 )
 
 func main() {
+	slog.Debug("client starting")
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
@@ -32,6 +34,7 @@ func main() {
 	c := client.New(baseURL)
 	ctx := context.Background()
 
+	slog.Debug("executing command", "command", remaining[0])
 	switch remaining[0] {
 	case "list-collections":
 		listCollections(ctx, c, remaining[1:])
@@ -59,6 +62,7 @@ func main() {
 }
 
 func usage() {
+	slog.Debug("printing usage")
 	fmt.Fprintf(os.Stderr, `usage: client --url <service-url> <command> [options]
 
 commands:
@@ -75,6 +79,7 @@ commands:
 }
 
 func parseGlobalFlags(args []string) (string, []string) {
+	slog.Debug("parsing global flags")
 	var url string
 	var out []string
 	for i := 0; i < len(args); i++ {
@@ -95,6 +100,7 @@ func parseGlobalFlags(args []string) (string, []string) {
 }
 
 func createCollection(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("createCollection called")
 	fs := flag.NewFlagSet("create-collection", flag.ExitOnError)
 	name := fs.String("name", "", "collection name")
 	dataType := fs.String("data-type", "", "data type")
@@ -112,6 +118,7 @@ func createCollection(ctx context.Context, c *client.Client, args []string) {
 }
 
 func listCollections(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("listCollections called")
 	colls, err := c.ListCollections(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -121,6 +128,7 @@ func listCollections(ctx context.Context, c *client.Client, args []string) {
 }
 
 func deleteCollection(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("deleteCollection called")
 	fs := flag.NewFlagSet("delete-collection", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	fs.Parse(args)
@@ -136,6 +144,7 @@ func deleteCollection(ctx context.Context, c *client.Client, args []string) {
 }
 
 func upload(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("upload called")
 	fs := flag.NewFlagSet("upload", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	dataType := fs.String("data-type", "", "data type")
@@ -175,6 +184,7 @@ func upload(ctx context.Context, c *client.Client, args []string) {
 }
 
 func get(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("get called")
 	fs := flag.NewFlagSet("get", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	id := fs.String("id", "", "object id")
@@ -192,6 +202,7 @@ func get(ctx context.Context, c *client.Client, args []string) {
 }
 
 func getData(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("getData called")
 	fs := flag.NewFlagSet("data", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	id := fs.String("id", "", "object id")
@@ -218,6 +229,7 @@ func getData(ctx context.Context, c *client.Client, args []string) {
 }
 
 func getTags(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("getTags called")
 	fs := flag.NewFlagSet("tags", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	id := fs.String("id", "", "object id")
@@ -240,6 +252,7 @@ func getTags(ctx context.Context, c *client.Client, args []string) {
 }
 
 func query(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("query called")
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	tagsJson := fs.String("tags", "", "JSON object of tag:true/false")
@@ -266,6 +279,7 @@ func query(ctx context.Context, c *client.Client, args []string) {
 }
 
 func deleteObject(ctx context.Context, c *client.Client, args []string) {
+	slog.Debug("deleteObject called")
 	fs := flag.NewFlagSet("delete", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
 	id := fs.String("id", "", "object id")
@@ -282,11 +296,13 @@ func deleteObject(ctx context.Context, c *client.Client, args []string) {
 }
 
 func printJSON(v any) {
+	slog.Debug("printJSON called")
 	b, _ := json.MarshalIndent(v, "", "  ")
 	fmt.Println(string(b))
 }
 
 func readStdin() ([]byte, error) {
+	slog.Debug("readStdin called")
 	var b strings.Builder
 	buf := make([]byte, 4096)
 	for {

@@ -6,9 +6,6 @@
 *.so
 *.dylib
 
-# Builds
-build/
-
 # Test binary
 *.test
 

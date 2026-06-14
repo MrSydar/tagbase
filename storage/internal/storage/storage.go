@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -22,6 +23,7 @@ type S3Store struct {
 
 // NewS3Store creates a new S3 store.
 func NewS3Store(endpoint, region, bucket, accessKey, secretKey string, forcePathStyle bool) (*S3Store, error) {
+	slog.Debug("NewS3Store", "bucket", bucket, "region", region, "endpoint", endpoint)
 	cfg, err := config.LoadDefaultConfig(context.Background(),
 		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")),
@@ -44,6 +46,7 @@ func NewS3Store(endpoint, region, bucket, accessKey, secretKey string, forcePath
 
 // Upload stores payload in S3.
 func (s *S3Store) Upload(ctx context.Context, key string, data io.Reader, size int64) error {
+	slog.Debug("S3Store.Upload", "key", key, "size", size)
 	// We need to buffer since aws sdk v2 PutObject needs an io.Reader but may need length
 	// For simplicity, if size is known we pass it directly.
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
@@ -60,6 +63,7 @@ func (s *S3Store) Upload(ctx context.Context, key string, data io.Reader, size i
 
 // Download retrieves payload from S3.
 func (s *S3Store) Download(ctx context.Context, key string) (io.ReadCloser, int64, error) {
+	slog.Debug("S3Store.Download", "key", key)
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
@@ -76,6 +80,7 @@ func (s *S3Store) Download(ctx context.Context, key string) (io.ReadCloser, int6
 
 // Delete removes an object from S3.
 func (s *S3Store) Delete(ctx context.Context, key string) error {
+	slog.Debug("S3Store.Delete", "key", key)
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
@@ -88,6 +93,7 @@ func (s *S3Store) Delete(ctx context.Context, key string) error {
 
 // EnsureBucket creates the bucket if it doesn't exist.
 func (s *S3Store) EnsureBucket(ctx context.Context) error {
+	slog.Debug("S3Store.EnsureBucket", "bucket", s.bucket)
 	_, err := s.client.CreateBucket(ctx, &s3.CreateBucketInput{
 		Bucket: aws.String(s.bucket),
 	})
@@ -105,6 +111,7 @@ func (s *S3Store) EnsureBucket(ctx context.Context) error {
 
 // HeadBucket checks if the bucket is accessible.
 func (s *S3Store) HeadBucket(ctx context.Context) error {
+	slog.Debug("S3Store.HeadBucket", "bucket", s.bucket)
 	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(s.bucket),
 	})
@@ -113,6 +120,7 @@ func (s *S3Store) HeadBucket(ctx context.Context) error {
 
 // ReadAll reads the S3 object into a byte slice.
 func (s *S3Store) ReadAll(ctx context.Context, key string) ([]byte, error) {
+	slog.Debug("S3Store.ReadAll", "key", key)
 	rc, _, err := s.Download(ctx, key)
 	if err != nil {
 		return nil, err

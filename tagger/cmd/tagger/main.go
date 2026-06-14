@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"go.uber.org/zap"
 
 	storageclient "mrsydar/tagbase/storage/pkg/client"
 	"mrsydar/tagbase/tagger/internal/server"
@@ -17,6 +16,11 @@ import (
 )
 
 func main() {
+	programLevel := new(slog.LevelVar)
+	programLevel.Set(slog.LevelDebug)
+	h := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: programLevel})
+	slog.SetDefault(slog.New(h))
+
 	httpAddr := os.Getenv("TAGGER_HTTP_ADDR")
 	if httpAddr == "" {
 		httpAddr = ":8081"
@@ -52,11 +56,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger, _ := zap.NewProduction()
-	defer logger.Sync()
-
 	storageClient := storageclient.New(storageBaseURL)
-	srv := server.NewServer(storageClient, ev, logger)
+	srv := server.NewServer(storageClient, ev)
 
 	httpServer := &http.Server{
 		Addr:         httpAddr,
@@ -66,9 +67,10 @@ func main() {
 	}
 
 	go func() {
-		logger.Info("starting tagger server", zap.String("addr", httpAddr), zap.String("storage_url", storageBaseURL))
+		slog.Info("starting tagger server", "addr", httpAddr, "storage_url", storageBaseURL)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatal("http server error", zap.Error(err))
+			slog.Error("http server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -76,9 +78,9 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 
-	logger.Info("shutting down")
+	slog.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	httpServer.Shutdown(shutdownCtx)
-	logger.Info("shutdown complete")
+	slog.Info("shutdown complete")
 }

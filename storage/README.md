@@ -103,8 +103,7 @@ curl -X POST http://localhost:8080/v1/collections/jobs/objects/query \
 ```json
 {
   "objects": [...],
-  "has_more": true,
-  "next_cursor": "..."
+  "next": "..."
 }
 ```
 

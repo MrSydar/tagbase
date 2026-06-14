@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -28,6 +29,7 @@ type Config struct {
 
 // Load loads configuration from environment variables with defaults.
 func Load(prefix string) (*Config, error) {
+	slog.Debug("Load", "prefix", prefix)
 	cfg := &Config{
 		HTTPAddr:               envOrDefault(prefix+"HTTP_ADDR", ":8080"),
 		PGDSN:                  os.Getenv(prefix + "PG_DSN"),
@@ -38,11 +40,11 @@ func Load(prefix string) (*Config, error) {
 		S3SecretKey:            os.Getenv(prefix + "S3_SECRET_KEY"),
 		S3ForcePathStyle:       true,
 		TagEngineURL:           os.Getenv(prefix + "TAG_ENGINE_URL"),
-		DefaultLimit:           5,
-		MaxLimit:               100,
-		DefaultTTL:             0,
-		MaxTagsPerQuery:        100,
-		MaxObjectSizeBytes:     10 * 1024 * 1024,
+		DefaultLimit:         5,
+		MaxLimit:             100,
+		DefaultTTL:           0,
+		MaxTagsPerQuery:      100,
+		MaxObjectSizeBytes:   10 * 1024 * 1024,
 		RetentionSweepInterval: 60 * time.Second,
 	}
 
@@ -102,10 +104,12 @@ func Load(prefix string) (*Config, error) {
 		}
 	}
 
+	slog.Debug("Load: config loaded", "HTTPAddr", cfg.HTTPAddr, "PGDSN", cfg.PGDSN, "S3Bucket", cfg.S3Bucket, "TagEngineURL", cfg.TagEngineURL)
 	return cfg, nil
 }
 
 func envOrDefault(key, def string) string {
+	slog.Debug("envOrDefault", "key", key, "default", def)
 	if v := os.Getenv(key); v != "" {
 		return v
 	}

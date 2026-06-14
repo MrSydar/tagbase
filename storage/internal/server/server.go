@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"go.uber.org/zap"
 
 	"mrsydar/tagbase/storage/internal/config"
 	"mrsydar/tagbase/storage/internal/db"
@@ -32,19 +32,17 @@ type Server struct {
 	store          *storage.S3Store
 	tagClient      client.Tagger
 	queryRunner    *query.Runner
-	logger         *zap.Logger
 	supportedTypes []string
 }
 
 // NewServer creates a new Server.
-func NewServer(cfg *config.Config, database *db.DB, store *storage.S3Store, tagClient client.Tagger, logger *zap.Logger) *Server {
+func NewServer(cfg *config.Config, database *db.DB, store *storage.S3Store, tagClient client.Tagger) *Server {
 	return &Server{
 		cfg:         cfg,
 		db:          database,
 		store:       store,
 		tagClient:   tagClient,
 		queryRunner: query.NewRunner(database, tagClient),
-		logger:      logger,
 	}
 }
 
@@ -56,7 +54,7 @@ func (s *Server) SetSupportedTypes(types []string) {
 // Router builds and returns the chi router.
 func (s *Server) Router() chi.Router {
 	r := chi.NewRouter()
-	r.Use(requestLogger(s.logger))
+	r.Use(requestLogger())
 
 	r.Get("/healthz", s.healthz)
 	r.Get("/readyz", s.readyz)
@@ -75,23 +73,27 @@ func (s *Server) Router() chi.Router {
 }
 
 func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("healthz handler called")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("readyz handler called")
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	// Check DB
+	slog.Debug("readyz checking database")
 	if err := s.db.Pool().Ping(ctx); err != nil {
-		s.logger.Error("readyz db ping failed", zap.Error(err))
+		slog.Error("readyz db ping failed", "error", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		writeError(w, http.StatusServiceUnavailable, "not_ready", "database not available")
 		return
 	}
 	// Check S3
+	slog.Debug("readyz checking S3")
 	if err := s.store.HeadBucket(ctx); err != nil {
-		s.logger.Error("readyz s3 check failed", zap.Error(err))
+		slog.Error("readyz s3 check failed", "error", err)
 		w.WriteHeader(http.StatusServiceUnavailable)
 		writeError(w, http.StatusServiceUnavailable, "not_ready", "object storage not available")
 		return
@@ -101,9 +103,10 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listCollections(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("listCollections handler called")
 	collections, err := s.db.ListCollections(r.Context())
 	if err != nil {
-		s.logger.Error("list collections failed", zap.Error(err))
+		slog.Error("list collections failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list collections")
 		return
 	}
@@ -115,19 +118,23 @@ func (s *Server) listCollections(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("createCollection handler called")
 	var req models.CollectionCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 	if err := validate.ValidateCollectionName(req.Name); err != nil {
+		slog.Debug("createCollection validation failed: invalid name", "name", req.Name)
 		writeError(w, http.StatusBadRequest, "invalid_name", err.Error())
 		return
 	}
 	if err := validate.ValidateDataType(req.DataType, s.supportedTypes); err != nil {
+		slog.Debug("createCollection validation failed: unsupported data type", "data_type", req.DataType)
 		writeError(w, http.StatusBadRequest, "unsupported_data_type", err.Error())
 		return
 	}
+	slog.Debug("creating collection", "name", req.Name, "data_type", req.DataType)
 	coll, err := s.db.CreateCollection(r.Context(), req.Name, req.DataType)
 	if err != nil {
 		// Check for unique violation
@@ -135,10 +142,11 @@ func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "already_exists", "collection already exists")
 			return
 		}
-		s.logger.Error("create collection failed", zap.Error(err))
+		slog.Error("create collection failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to create collection")
 		return
 	}
+	slog.Debug("collection created", "name", coll.Name, "data_type", coll.DataType)
 	resp := models.CollectionCreateResponse{
 		Name:     coll.Name,
 		DataType: coll.DataType,
@@ -149,6 +157,7 @@ func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteCollection(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("deleteCollection handler called")
 	collectionName := chi.URLParam(r, "collection")
 	if err := validate.ValidateCollectionName(collectionName); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_collection_name", err.Error())
@@ -163,20 +172,20 @@ func (s *Server) deleteCollection(w http.ResponseWriter, r *http.Request) {
 
 	payloadKeys, err := s.db.GetCollectionPayloadKeys(r.Context(), coll.ID)
 	if err != nil {
-		s.logger.Error("get collection payload keys failed", zap.Error(err))
+		slog.Error("get collection payload keys failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete collection")
 		return
 	}
 
 	if err := s.db.DeleteCollection(r.Context(), coll.ID); err != nil {
-		s.logger.Error("delete collection failed", zap.Error(err))
+		slog.Error("delete collection failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete collection")
 		return
 	}
 
 	for _, key := range payloadKeys {
 		if err := s.store.Delete(r.Context(), key); err != nil {
-			s.logger.Warn("delete collection object from S3 failed", zap.Error(err), zap.String("key", key))
+			slog.Warn("delete collection object from S3 failed", "error", err, "key", key)
 		}
 	}
 
@@ -184,6 +193,7 @@ func (s *Server) deleteCollection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("putObject handler called")
 	collectionName := chi.URLParam(r, "collection")
 	if err := validate.ValidateCollectionName(collectionName); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_collection_name", err.Error())
@@ -192,16 +202,19 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 
 	coll, err := s.db.GetCollectionByName(r.Context(), collectionName)
 	if err != nil {
+		slog.Debug("putObject collection not found", "collection", collectionName)
 		writeError(w, http.StatusNotFound, "not_found", "collection not found")
 		return
 	}
 
 	dataType := r.URL.Query().Get("data_type")
 	if dataType == "" {
+		slog.Debug("putObject missing data_type")
 		writeError(w, http.StatusBadRequest, "missing_data_type", "data_type is required")
 		return
 	}
 	if dataType != coll.DataType {
+		slog.Debug("putObject data_type mismatch", "collection_type", coll.DataType, "object_type", dataType)
 		writeError(w, http.StatusBadRequest, "invalid_data_type", "object data_type does not match collection")
 		return
 	}
@@ -234,9 +247,10 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 		date = time.Now().UTC()
 	}
 
+	slog.Debug("putObject buffering upload to temp file")
 	tmpFile, err := os.CreateTemp("", "tagbase-upload-*")
 	if err != nil {
-		s.logger.Error("create temp file failed", zap.Error(err))
+		slog.Error("create temp file failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to buffer upload")
 		return
 	}
@@ -249,7 +263,7 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 	limited := io.LimitReader(r.Body, s.cfg.MaxObjectSizeBytes+1)
 	written, err := io.Copy(io.MultiWriter(tmpFile, hasher), limited)
 	if err != nil {
-		s.logger.Error("stream body failed", zap.Error(err))
+		slog.Error("stream body failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to read body")
 		return
 	}
@@ -260,8 +274,10 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 
 	contentHash := hex.EncodeToString(hasher.Sum(nil))
 
+	slog.Debug("putObject checking for duplicate hash", "hash", contentHash)
 	// Check for existing object in collection.
 	if existing, err := s.db.GetObjectByCollectionAndHash(r.Context(), coll.ID, contentHash); err == nil {
+		slog.Debug("putObject found duplicate object", "id", existing.ID)
 		// Delete newly uploaded S3 object if it exists (in case of race). We haven't uploaded yet though.
 		resp := models.ObjectUploadResponse{
 			ID:          existing.ID,
@@ -277,6 +293,7 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	slog.Debug("putObject inserting into database")
 	// Insert object first so we have an ID, then upload to S3.
 	objectID := ""
 	// We need to insert to get ID, but if S3 fails, we need to clean up.
@@ -295,16 +312,16 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 				if existing.ExpiresAt != nil && !existing.ExpiresAt.After(time.Now().UTC()) {
 					payloadKey, delErr := s.db.DeleteObject(r.Context(), existing.ID)
 					if delErr != nil {
-						s.logger.Error("delete expired duplicate failed", zap.Error(delErr))
+						slog.Error("delete expired duplicate failed", "error", delErr)
 						writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete expired duplicate")
 						return
 					}
 					if err := s.store.Delete(r.Context(), payloadKey); err != nil {
-						s.logger.Warn("delete expired duplicate from s3 failed", zap.Error(err), zap.String("key", payloadKey))
+						slog.Warn("delete expired duplicate from s3 failed", "error", err, "key", payloadKey)
 					}
 					obj, err = s.db.InsertObject(r.Context(), coll.ID, contentHash, date, written, dataType, "temp", expiresAt)
 					if err != nil {
-						s.logger.Error("insert object after cleanup failed", zap.Error(err))
+						slog.Error("insert object after cleanup failed", "error", err)
 						writeError(w, http.StatusInternalServerError, "internal_error", "failed to insert object")
 						return
 					}
@@ -324,37 +341,40 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		s.logger.Error("insert object failed", zap.Error(err))
+		slog.Error("insert object failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to insert object")
 		return
 	}
 	objectID = obj.ID
 	payloadKey = fmt.Sprintf("%s/%s", collectionName, objectID)
 
+	slog.Debug("putObject updating payload_key", "objectID", objectID, "payloadKey", payloadKey)
 	// Update payload_key.
 	_, err = s.db.Pool().Exec(r.Context(), `UPDATE objects SET payload_key = $1 WHERE id = $2`, payloadKey, objectID)
 	if err != nil {
-		s.logger.Error("update payload key failed", zap.Error(err))
+		slog.Error("update payload key failed", "error", err)
 		// Best effort cleanup
 		s.db.Pool().Exec(r.Context(), `DELETE FROM objects WHERE id = $1`, objectID)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update object")
 		return
 	}
 
+	slog.Debug("putObject uploading to S3")
 	// Upload to S3.
 	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
-		s.logger.Error("seek temp file failed", zap.Error(err))
+		slog.Error("seek temp file failed", "error", err)
 		s.db.Pool().Exec(r.Context(), `DELETE FROM objects WHERE id = $1`, objectID)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to store payload")
 		return
 	}
 	if err := s.store.Upload(r.Context(), payloadKey, tmpFile, written); err != nil {
-		s.logger.Error("s3 upload failed", zap.Error(err))
+		slog.Error("s3 upload failed", "error", err)
 		s.db.Pool().Exec(r.Context(), `DELETE FROM objects WHERE id = $1`, objectID)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to store payload")
 		return
 	}
 
+	slog.Debug("putObject upload complete", "id", objectID, "size", written)
 	resp := models.ObjectUploadResponse{
 		ID:          objectID,
 		Collection:  collectionName,
@@ -369,6 +389,7 @@ func (s *Server) putObject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getObjectMetadata(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("getObjectMetadata handler called")
 	id := chi.URLParam(r, "id")
 	obj, err := s.db.GetObjectByID(r.Context(), id)
 	if err != nil {
@@ -386,6 +407,7 @@ func (s *Server) getObjectMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getObjectData(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("getObjectData handler called")
 	id := chi.URLParam(r, "id")
 	obj, err := s.db.GetObjectByID(r.Context(), id)
 	if err != nil {
@@ -400,7 +422,7 @@ func (s *Server) getObjectData(w http.ResponseWriter, r *http.Request) {
 
 	reader, size, err := s.store.Download(r.Context(), obj.PayloadKey)
 	if err != nil {
-		s.logger.Error("download failed", zap.Error(err), zap.String("key", obj.PayloadKey))
+		slog.Error("download failed", "error", err, "key", obj.PayloadKey)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to retrieve payload")
 		return
 	}
@@ -412,6 +434,7 @@ func (s *Server) getObjectData(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getObjectTags(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("getObjectTags handler called")
 	id := chi.URLParam(r, "id")
 	obj, err := s.db.GetObjectByID(r.Context(), id)
 	if err != nil {
@@ -452,11 +475,12 @@ func (s *Server) getObjectTags(w http.ResponseWriter, r *http.Request) {
 
 	knownTags, err := s.db.GetTagsForObject(r.Context(), id)
 	if err != nil {
-		s.logger.Error("get tags failed", zap.Error(err))
+		slog.Error("get tags failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to get tags")
 		return
 	}
 
+	slog.Debug("getObjectTags evaluating missing tags", "requested_count", len(requestedTags))
 	// Evaluate missing tags if requestedTags provided.
 	if len(requestedTags) > 0 {
 		var missing []string
@@ -469,12 +493,12 @@ func (s *Server) getObjectTags(w http.ResponseWriter, r *http.Request) {
 			// Call tagging engine.
 			resp, err := s.tagClient.Tag(r.Context(), collectionName, id, missing)
 			if err != nil {
-				s.logger.Error("tag engine failed", zap.Error(err))
+				slog.Error("tag engine failed", "error", err)
 				writeError(w, http.StatusBadGateway, "tag_engine_error", "tag engine failed")
 				return
 			}
 			if err := s.db.UpsertTags(r.Context(), obj.CollectionID, id, resp); err != nil {
-				s.logger.Error("upsert tags failed", zap.Error(err))
+				slog.Error("upsert tags failed", "error", err)
 				writeError(w, http.StatusInternalServerError, "internal_error", "failed to persist tags")
 				return
 			}
@@ -503,6 +527,7 @@ func (s *Server) getObjectTags(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("queryObjects handler called")
 	collectionName := chi.URLParam(r, "collection")
 	if err := validate.ValidateCollectionName(collectionName); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_collection_name", err.Error())
@@ -544,7 +569,7 @@ func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.queryRunner.Query(r.Context(), coll, req)
 	if err != nil {
-		s.logger.Error("query failed", zap.Error(err))
+		slog.Error("query failed", "error", err)
 		if strings.Contains(err.Error(), "tag engine error") || strings.Contains(err.Error(), "tag engine failure") {
 			writeError(w, http.StatusBadGateway, "tag_engine_error", err.Error())
 			return
@@ -553,13 +578,12 @@ func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For accurate has_more, we should have fetched limit+1 in query layer.
-	// Let's return as-is for now; clients may see has_more=true when there are no more results.
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) deleteObject(w http.ResponseWriter, r *http.Request) {
+	slog.Debug("deleteObject handler called")
 	id := chi.URLParam(r, "id")
 	collectionName := chi.URLParam(r, "collection")
 	obj, err := s.db.GetObjectByID(r.Context(), id)
@@ -574,13 +598,13 @@ func (s *Server) deleteObject(w http.ResponseWriter, r *http.Request) {
 
 	payloadKey, err := s.db.DeleteObject(r.Context(), id)
 	if err != nil {
-		s.logger.Error("delete object failed", zap.Error(err))
+		slog.Error("delete object failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete object")
 		return
 	}
 
 	if err := s.store.Delete(r.Context(), payloadKey); err != nil {
-		s.logger.Warn("delete from S3 failed", zap.Error(err), zap.String("key", payloadKey))
+		slog.Warn("delete from S3 failed", "error", err, "key", payloadKey)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -595,15 +619,15 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func requestLogger(logger *zap.Logger) func(http.Handler) http.Handler {
+func requestLogger() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			next.ServeHTTP(w, r)
-			logger.Info("http request",
-				zap.String("method", r.Method),
-				zap.String("path", r.URL.Path),
-				zap.Duration("duration", time.Since(start)),
+			slog.Info("http request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"duration", time.Since(start),
 			)
 		})
 	}

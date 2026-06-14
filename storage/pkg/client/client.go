@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ type Client struct {
 
 // New creates a new storage client.
 func New(baseURL string) *Client {
+	slog.Debug("New", "baseURL", baseURL)
 	return &Client{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		http:    &http.Client{Timeout: 30 * time.Second},
@@ -74,9 +76,8 @@ type DateFilter struct {
 
 // TagsQueryResponse is the response for tag queries.
 type TagsQueryResponse struct {
-	Objects    []Object `json:"objects"`
-	HasMore    bool     `json:"has_more"`
-	NextCursor string   `json:"next_cursor,omitempty"`
+	Objects []Object `json:"objects"`
+	Next    string   `json:"next,omitempty"`
 }
 
 // TagResponse is returned when getting tags for an object.
@@ -96,6 +97,7 @@ type ErrorResponse struct {
 
 // ListCollections returns all collections.
 func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
+	slog.Debug("ListCollections: called")
 	url := c.baseURL + "/v1/collections"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -120,6 +122,7 @@ func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 
 // CreateCollection creates a new collection.
 func (c *Client) CreateCollection(ctx context.Context, name, dataType string) (*Collection, error) {
+	slog.Debug("CreateCollection", "name", name, "dataType", dataType)
 	reqBody, err := json.Marshal(map[string]string{"name": name, "data_type": dataType})
 	if err != nil {
 		return nil, err
@@ -147,6 +150,7 @@ func (c *Client) CreateCollection(ctx context.Context, name, dataType string) (*
 
 // GetObjectMetadata fetches object metadata by collection and ID.
 func (c *Client) GetObjectMetadata(ctx context.Context, collection, id string) (*Object, error) {
+	slog.Debug("GetObjectMetadata", "collection", collection, "id", id)
 	url := fmt.Sprintf("%s/v1/collections/%s/objects/%s", c.baseURL, collection, id)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -169,6 +173,7 @@ func (c *Client) GetObjectMetadata(ctx context.Context, collection, id string) (
 
 // GetObjectData downloads object payload by collection and ID.
 func (c *Client) GetObjectData(ctx context.Context, collection, id string) ([]byte, error) {
+	slog.Debug("GetObjectData", "collection", collection, "id", id)
 	url := fmt.Sprintf("%s/v1/collections/%s/objects/%s/data", c.baseURL, collection, id)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -191,6 +196,7 @@ func (c *Client) GetObjectData(ctx context.Context, collection, id string) ([]by
 
 // GetObjectTags fetches tags for an object.
 func (c *Client) GetObjectTags(ctx context.Context, collection, id string, tags []string) (*TagResponse, error) {
+	slog.Debug("GetObjectTags", "collection", collection, "id", id, "tags", tags)
 	url := fmt.Sprintf("%s/v1/collections/%s/objects/%s/tags?tags=%s", c.baseURL, collection, id, strings.Join(tags, ","))
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -213,6 +219,7 @@ func (c *Client) GetObjectTags(ctx context.Context, collection, id string, tags 
 
 // QueryObjects queries objects by tags.
 func (c *Client) QueryObjects(ctx context.Context, collection string, req TagsQueryRequest) (*TagsQueryResponse, error) {
+	slog.Debug("QueryObjects", "collection", collection)
 	reqBody, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -240,6 +247,7 @@ func (c *Client) QueryObjects(ctx context.Context, collection string, req TagsQu
 
 // UploadObject uploads an object body to the storage service.
 func (c *Client) UploadObject(ctx context.Context, collection, dataType string, data []byte, date time.Time, ttlSeconds int) (*ObjectUploadResponse, error) {
+	slog.Debug("UploadObject", "collection", collection, "dataType", dataType, "dataLen", len(data), "ttl", ttlSeconds)
 	q := fmt.Sprintf("%s/v1/collections/%s/objects?data_type=%s", c.baseURL, collection, dataType)
 	if !date.IsZero() {
 		q += fmt.Sprintf("&date=%s", date.Format(time.RFC3339))
@@ -269,6 +277,7 @@ func (c *Client) UploadObject(ctx context.Context, collection, dataType string, 
 
 // DeleteCollection deletes a collection by name.
 func (c *Client) DeleteCollection(ctx context.Context, collection string) error {
+	slog.Debug("DeleteCollection", "collection", collection)
 	url := fmt.Sprintf("%s/v1/collections/%s", c.baseURL, collection)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {
@@ -287,6 +296,7 @@ func (c *Client) DeleteCollection(ctx context.Context, collection string) error 
 
 // DeleteObject deletes an object by collection and ID.
 func (c *Client) DeleteObject(ctx context.Context, collection, id string) error {
+	slog.Debug("DeleteObject", "collection", collection, "id", id)
 	url := fmt.Sprintf("%s/v1/collections/%s/objects/%s", c.baseURL, collection, id)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {

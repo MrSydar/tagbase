@@ -79,9 +79,8 @@ type TagsQueryRequest struct {
 
 // TagsQueryResponse is the response for tag queries.
 type TagsQueryResponse struct {
-	Objects    []Object `json:"objects"`
-	HasMore    bool     `json:"has_more"`
-	NextCursor string   `json:"next_cursor,omitempty"`
+	Objects []Object `json:"objects"`
+	Next    string   `json:"next,omitempty"`
 }
 
 // DateFilter defines date constraints.

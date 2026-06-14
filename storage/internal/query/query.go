@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"mrsydar/tagbase/storage/internal/cursor"
@@ -19,11 +20,13 @@ type Runner struct {
 
 // NewRunner creates a new query runner.
 func NewRunner(database *db.DB, client client.Tagger) *Runner {
+	slog.Debug("NewRunner: created")
 	return &Runner{db: database, client: client}
 }
 
 // Query executes a tag query.
 func (r *Runner) Query(ctx context.Context, collection *models.Collection, req models.TagsQueryRequest) (*models.TagsQueryResponse, error) {
+	slog.Debug("Query", "collection", collection.Name, "limit", req.Limit, "tags", len(req.Tags))
 	var cursorDate time.Time
 	var cursorID string
 	if req.Cursor != "" {
@@ -38,6 +41,7 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 
 	// No tag filtering: return by date only.
 	if len(req.Tags) == 0 {
+		slog.Debug("Query: no tags provided, querying by date only")
 		objs, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, cursorDate, cursorID, targetLimit)
 		if err != nil {
 			return nil, fmt.Errorf("query by date: %w", err)
@@ -54,6 +58,7 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 		batchSize = 200
 	}
 
+	slog.Debug("Query: starting batch scan for tags")
 	for len(results) < targetLimit {
 		candidates, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, scanCursorDate, scanCursorID, batchSize)
 		if err != nil {
@@ -95,6 +100,7 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 				}
 			}
 			if len(missing) > 0 {
+				// Call tagging engine.
 				resp, err := r.client.Tag(ctx, collection.Name, cand.ID, missing)
 				if err != nil {
 					return nil, fmt.Errorf("tag engine error: %w", err)
@@ -138,17 +144,17 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 }
 
 func buildResponse(results []models.Object, limit int) (*models.TagsQueryResponse, error) {
+	slog.Debug("buildResponse", "results", len(results), "limit", limit)
 	hasMore := len(results) > limit
 	if hasMore {
 		results = results[:limit]
 	}
 	resp := &models.TagsQueryResponse{
 		Objects: results,
-		HasMore: hasMore,
 	}
-	if len(results) > 0 {
+	if hasMore && len(results) > 0 {
 		last := results[len(results)-1]
-		resp.NextCursor = cursor.Encode(last.Date, last.ID)
+		resp.Next = cursor.Encode(last.Date, last.ID)
 	}
 	return resp, nil
 }

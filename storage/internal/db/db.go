@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,21 +18,25 @@ type DB struct {
 
 // New creates a new DB instance.
 func New(pool *pgxpool.Pool) *DB {
+	slog.Debug("New DB instance created")
 	return &DB{pool: pool}
 }
 
 // Close closes the pool.
 func (d *DB) Close() {
+	slog.Debug("Close DB pool")
 	d.pool.Close()
 }
 
 // Pool returns the underlying pool.
 func (d *DB) Pool() *pgxpool.Pool {
+	slog.Debug("Pool: returning underlying pool")
 	return d.pool
 }
 
 // CreateCollection inserts a collection.
 func (d *DB) CreateCollection(ctx context.Context, name, dataType string) (*models.Collection, error) {
+	slog.Debug("CreateCollection", "name", name, "dataType", dataType)
 	var c models.Collection
 	err := d.pool.QueryRow(ctx,
 		`INSERT INTO collections (name, data_type) VALUES ($1, $2) RETURNING id, name, data_type, created_at`,
@@ -45,6 +50,7 @@ func (d *DB) CreateCollection(ctx context.Context, name, dataType string) (*mode
 
 // GetCollectionByName fetches a collection by name.
 func (d *DB) GetCollectionByName(ctx context.Context, name string) (*models.Collection, error) {
+	slog.Debug("GetCollectionByName", "name", name)
 	var c models.Collection
 	err := d.pool.QueryRow(ctx,
 		`SELECT id, name, data_type, created_at FROM collections WHERE name = $1`,
@@ -61,6 +67,7 @@ func (d *DB) GetCollectionByName(ctx context.Context, name string) (*models.Coll
 
 // ListCollections returns all collections.
 func (d *DB) ListCollections(ctx context.Context) ([]models.Collection, error) {
+	slog.Debug("ListCollections: called")
 	rows, err := d.pool.Query(ctx,
 		`SELECT id, name, data_type, created_at FROM collections ORDER BY created_at DESC`,
 	)
@@ -82,6 +89,7 @@ func (d *DB) ListCollections(ctx context.Context) ([]models.Collection, error) {
 
 // GetCollectionPayloadKeys returns payload keys for all objects in a collection.
 func (d *DB) GetCollectionPayloadKeys(ctx context.Context, collectionID string) ([]string, error) {
+	slog.Debug("GetCollectionPayloadKeys", "collectionID", collectionID)
 	rows, err := d.pool.Query(ctx,
 		`SELECT payload_key FROM objects WHERE collection_id = $1`,
 		collectionID,
@@ -104,6 +112,7 @@ func (d *DB) GetCollectionPayloadKeys(ctx context.Context, collectionID string) 
 
 // DeleteCollection deletes a collection by ID. Cascades to objects and tags via FK.
 func (d *DB) DeleteCollection(ctx context.Context, collectionID string) error {
+	slog.Debug("DeleteCollection", "collectionID", collectionID)
 	_, err := d.pool.Exec(ctx,
 		`DELETE FROM collections WHERE id = $1`,
 		collectionID,
@@ -116,6 +125,7 @@ func (d *DB) DeleteCollection(ctx context.Context, collectionID string) error {
 
 // GetObjectByID fetches object metadata by ID, joined with collection name.
 func (d *DB) GetObjectByID(ctx context.Context, id string) (*models.Object, error) {
+	slog.Debug("GetObjectByID", "id", id)
 	var o models.Object
 	var expiresAt *time.Time
 	err := d.pool.QueryRow(ctx,
@@ -136,6 +146,7 @@ func (d *DB) GetObjectByID(ctx context.Context, id string) (*models.Object, erro
 
 // GetObjectByCollectionAndHash fetches an object by collection ID and content hash.
 func (d *DB) GetObjectByCollectionAndHash(ctx context.Context, collectionID, hash string) (*models.Object, error) {
+	slog.Debug("GetObjectByCollectionAndHash", "collectionID", collectionID, "hash", hash)
 	var o models.Object
 	var expiresAt *time.Time
 	var collName string
@@ -158,6 +169,7 @@ func (d *DB) GetObjectByCollectionAndHash(ctx context.Context, collectionID, has
 
 // GetObjectByCollectionAndHashIncludingExpired fetches an object by collection ID and content hash, including expired rows.
 func (d *DB) GetObjectByCollectionAndHashIncludingExpired(ctx context.Context, collectionID, hash string) (*models.Object, error) {
+	slog.Debug("GetObjectByCollectionAndHashIncludingExpired", "collectionID", collectionID, "hash", hash)
 	var o models.Object
 	var expiresAt *time.Time
 	var collName string
@@ -180,6 +192,7 @@ func (d *DB) GetObjectByCollectionAndHashIncludingExpired(ctx context.Context, c
 
 // InsertObject inserts a new object.
 func (d *DB) InsertObject(ctx context.Context, collectionID string, hash string, date time.Time, sizeBytes int64, dataType, payloadKey string, expiresAt *time.Time) (*models.Object, error) {
+	slog.Debug("InsertObject", "collectionID", collectionID, "sizeBytes", sizeBytes, "dataType", dataType)
 	var id string
 	var createdAt time.Time
 	err := d.pool.QueryRow(ctx,
@@ -205,6 +218,7 @@ func (d *DB) InsertObject(ctx context.Context, collectionID string, hash string,
 
 // DeleteObject removes object, tags, and returns payload_key.
 func (d *DB) DeleteObject(ctx context.Context, id string) (string, error) {
+	slog.Debug("DeleteObject", "id", id)
 	var payloadKey string
 	err := d.pool.QueryRow(ctx,
 		`DELETE FROM objects WHERE id = $1 RETURNING payload_key`,
@@ -221,6 +235,7 @@ func (d *DB) DeleteObject(ctx context.Context, id string) (string, error) {
 
 // GetTagsForObject returns known tags for an object.
 func (d *DB) GetTagsForObject(ctx context.Context, objectID string) (map[string]bool, error) {
+	slog.Debug("GetTagsForObject", "objectID", objectID)
 	rows, err := d.pool.Query(ctx,
 		`SELECT tag, value FROM object_tags WHERE object_id = $1`,
 		objectID,
@@ -244,6 +259,7 @@ func (d *DB) GetTagsForObject(ctx context.Context, objectID string) (map[string]
 
 // UpsertTags inserts or updates tags for an object.
 func (d *DB) UpsertTags(ctx context.Context, collectionID, objectID string, tags map[string]bool) error {
+	slog.Debug("UpsertTags", "collectionID", collectionID, "objectID", objectID, "tagCount", len(tags))
 	if len(tags) == 0 {
 		return nil
 	}
@@ -271,6 +287,7 @@ func (d *DB) UpsertTags(ctx context.Context, collectionID, objectID string, tags
 
 // ListExpiredObjects returns expired object IDs in batches.
 func (d *DB) ListExpiredObjects(ctx context.Context, limit int) ([]string, error) {
+	slog.Debug("ListExpiredObjects", "limit", limit)
 	rows, err := d.pool.Query(ctx,
 		`SELECT id FROM objects WHERE expires_at IS NOT NULL AND expires_at <= NOW() ORDER BY expires_at LIMIT $1`,
 		limit,
@@ -293,6 +310,7 @@ func (d *DB) ListExpiredObjects(ctx context.Context, limit int) ([]string, error
 
 // QueryObjectsKnownTags returns objects that already have all tags known and matching.
 func (d *DB) QueryObjectsKnownTags(ctx context.Context, collectionID string, tags map[string]bool, dateFilter *models.DateFilter, cursorDate time.Time, cursorID string, limit int) ([]models.Object, error) {
+	slog.Debug("QueryObjectsKnownTags", "collectionID", collectionID, "tagCount", len(tags), "limit", limit)
 	// Build a query that finds objects where for every tag in the request,
 	// there exists a row in object_tags with that value.
 	// This is done via aggregation to avoid joins that could produce wrong counts.
@@ -376,6 +394,7 @@ func (d *DB) QueryObjectsKnownTags(ctx context.Context, collectionID string, tag
 }
 
 func (d *DB) queryObjectsByDate(ctx context.Context, collectionID string, dateFilter *models.DateFilter, cursorDate time.Time, cursorID string, limit int) ([]models.Object, error) {
+	slog.Debug("queryObjectsByDate", "collectionID", collectionID, "limit", limit)
 	args := []any{collectionID}
 	argIdx := 1
 
@@ -424,6 +443,7 @@ func (d *DB) queryObjectsByDate(ctx context.Context, collectionID string, dateFi
 
 // ScanCandidateObjects returns objects in order for further tag evaluation.
 func (d *DB) ScanCandidateObjects(ctx context.Context, collectionID string, dateFilter *models.DateFilter, cursorDate time.Time, cursorID string, limit int) ([]models.Object, error) {
+	slog.Debug("ScanCandidateObjects", "collectionID", collectionID, "limit", limit)
 	args := []any{collectionID}
 	argIdx := 1
 
@@ -472,6 +492,7 @@ func (d *DB) ScanCandidateObjects(ctx context.Context, collectionID string, date
 
 // GetKnownTagsForObjects returns all known tags for a set of object IDs.
 func (d *DB) GetKnownTagsForObjects(ctx context.Context, objectIDs []string) (map[string]map[string]bool, error) {
+	slog.Debug("GetKnownTagsForObjects", "objectCount", len(objectIDs))
 	if len(objectIDs) == 0 {
 		return map[string]map[string]bool{}, nil
 	}
@@ -506,6 +527,7 @@ func (d *DB) GetKnownTagsForObjects(ctx context.Context, objectIDs []string) (ma
 }
 
 func buildDateConds(col string, startIdx int, df *models.DateFilter) ([]string, []any, int) {
+	slog.Debug("buildDateConds", "col", col, "startIdx", startIdx)
 	if df == nil {
 		return nil, nil, startIdx
 	}
@@ -541,6 +563,7 @@ func buildDateConds(col string, startIdx int, df *models.DateFilter) ([]string, 
 }
 
 func stringsJoin(sep string, items []string) string {
+	slog.Debug("stringsJoin", "sep", sep, "items", len(items))
 	if len(items) == 0 {
 		return ""
 	}
@@ -552,10 +575,12 @@ func stringsJoin(sep string, items []string) string {
 }
 
 func joinStrings(items []string, sep string) string {
+	slog.Debug("joinStrings", "items", len(items), "sep", sep)
 	return stringsJoin(sep, items)
 }
 
 func scanObjects(rows pgx.Rows) ([]models.Object, error) {
+	slog.Debug("scanObjects: starting scan")
 	defer rows.Close()
 	var objs []models.Object
 	for rows.Next() {
