@@ -2,11 +2,13 @@ package evaluator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -33,7 +35,7 @@ func NewOpenAIEvaluator(apiKey, baseURL, model string, timeout time.Duration) *O
 
 // Evaluate evaluates tags for the given content using an LLM.
 // For now, only txt data type is supported.
-func (e *OpenAIEvaluator) Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error) {
+func (e *OpenAIEvaluator) Evaluate(ctx context.Context, dataType DataType, content []byte, tags []string) (map[string]bool, error) {
 	slog.Debug("OpenAIEvaluator.Evaluate", "data_type", dataType, "tags_count", len(tags))
 	result := make(map[string]bool, len(tags))
 	if dataType != DataTypeTxt {
@@ -50,7 +52,7 @@ func (e *OpenAIEvaluator) Evaluate(dataType DataType, content []byte, tags []str
 	}
 
 	prompt := buildPrompt(string(content), tags)
-	respBody, err := e.callChatCompletions(prompt)
+	respBody, err := e.callChatCompletions(ctx, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +95,7 @@ Tags: %s`,
 	)
 }
 
-func (e *OpenAIEvaluator) callChatCompletions(prompt string) ([]byte, error) {
+func (e *OpenAIEvaluator) callChatCompletions(ctx context.Context, prompt string) ([]byte, error) {
 	slog.Debug("callChatCompletions called")
 	payload := map[string]any{
 		"model": e.model,
@@ -109,7 +111,7 @@ func (e *OpenAIEvaluator) callChatCompletions(prompt string) ([]byte, error) {
 	}
 
 	url := e.baseURL + "/chat/completions"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create chat completion request: %w", err)
 	}
@@ -159,14 +161,32 @@ func parseTagResponse(respBody []byte, expectedTags []string) (map[string]bool, 
 	}
 
 	content := apiResp.Choices[0].Message.Content
+	slog.Debug("parseTagResponse content", "content", content)
+
+	return parseContent(content, expectedTags, result)
+}
+
+func parseContent(content string, expectedTags []string, result map[string]bool) (map[string]bool, error) {
+	var parsed map[string]any
 
 	// Try to parse the content directly as JSON.
-	var parsed map[string]any
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
 		slog.Debug("failed to parse content as JSON, attempting fallback extraction")
-		// Fallback: extract the first JSON object from the text.
-		start := bytes.IndexByte([]byte(content), '{')
-		end := bytes.LastIndexByte([]byte(content), '}')
+
+		// If content does not start with '{', trim everything up to </think> and try again.
+		if !strings.HasPrefix(content, "{") {
+			if idx := strings.Index(content, "</think>"); idx != -1 {
+				trimmed := strings.TrimSpace(content[idx+len("</think>"):])
+				slog.Debug("trimmed content after </think>", "trimmed", trimmed)
+				if err := json.Unmarshal([]byte(trimmed), &parsed); err == nil {
+					goto populate
+				}
+			}
+		}
+
+		// Final fallback: extract the first JSON object from the text.
+		start := strings.IndexByte(content, '{')
+		end := strings.LastIndexByte(content, '}')
 		if start == -1 || end == -1 || end <= start {
 			return nil, fmt.Errorf("could not extract JSON object from content: %s", content)
 		}
@@ -175,6 +195,7 @@ func parseTagResponse(respBody []byte, expectedTags []string) (map[string]bool, 
 		}
 	}
 
+populate:
 	for _, tag := range expectedTags {
 		if v, ok := parsed[tag]; ok {
 			switch val := v.(type) {

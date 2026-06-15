@@ -1,5 +1,7 @@
 package evaluator
 
+import "context"
+
 // DataType is the supported data type enum.
 type DataType string
 
@@ -10,6 +12,6 @@ const (
 
 // Evaluator evaluates tags against object content.
 type Evaluator interface {
-	Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error)
+	Evaluate(ctx context.Context, dataType DataType, content []byte, tags []string) (map[string]bool, error)
 	GetSupportedDataTypes() []string
 }

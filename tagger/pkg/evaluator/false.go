@@ -1,6 +1,9 @@
 package evaluator
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+)
 
 // FalseEvaluator returns false for every tag.
 type FalseEvaluator struct{}
@@ -12,7 +15,7 @@ func NewFalseEvaluator() *FalseEvaluator {
 }
 
 // Evaluate returns false for all tags regardless of data type.
-func (e *FalseEvaluator) Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error) {
+func (e *FalseEvaluator) Evaluate(ctx context.Context, dataType DataType, content []byte, tags []string) (map[string]bool, error) {
 	slog.Debug("FalseEvaluator.Evaluate", "data_type", dataType, "tags_count", len(tags))
 	result := make(map[string]bool, len(tags))
 	for _, tag := range tags {

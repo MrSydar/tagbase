@@ -107,7 +107,7 @@ func (s *Server) tag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	result, err := s.evaluator.Evaluate(evaluator.DataType(meta.DataType), data, req.Tags)
+	result, err := s.evaluator.Evaluate(r.Context(), evaluator.DataType(meta.DataType), data, req.Tags)
 	metrics.RecordEvaluatorLatency(s.evaluatorImpl, start)
 	if err != nil {
 		slog.Error("tagger: evaluation failed", "error", err)

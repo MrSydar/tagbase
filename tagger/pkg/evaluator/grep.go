@@ -1,6 +1,7 @@
 package evaluator
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 )
@@ -16,7 +17,7 @@ func NewGrepEvaluator() *GrepEvaluator {
 
 // Evaluate returns true for a tag if the content (when dataType is txt) contains the tag as a substring.
 // For non-txt data types all tags evaluate to false.
-func (e *GrepEvaluator) Evaluate(dataType DataType, content []byte, tags []string) (map[string]bool, error) {
+func (e *GrepEvaluator) Evaluate(ctx context.Context, dataType DataType, content []byte, tags []string) (map[string]bool, error) {
 	slog.Debug("GrepEvaluator.Evaluate", "data_type", dataType, "tags_count", len(tags))
 	result := make(map[string]bool, len(tags))
 	if dataType != DataTypeTxt {
