@@ -81,7 +81,7 @@ curl -s http://localhost:8081/metrics | grep tagger_
 
 **Query parameters** (see [`storage/README.md`](storage/) for full API docs):
 
-- `timeout_ms` — query timeout. Default `30000` (30 seconds), clamped hard between `1000` (1s) and `300000` (5m). If exceeded and `best_effort` is `false`, a `query_timeout` error is returned.
+- `timeout_ms` — query timeout. Default `30000` (30 seconds). Must be between `1000` (1s) and `300000` (5m); otherwise a `400 invalid_timeout` error is returned. If exceeded and `best_effort` is `false`, a `query_timeout` error is returned.
 - `best_effort` — when `true`, a timed-out query returns whatever matched objects were found instead of failing. A `next` pagination cursor is included so the client can resume scanning.
 
 ---

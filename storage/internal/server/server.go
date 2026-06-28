@@ -581,12 +581,15 @@ func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
 	timeoutMs := req.TimeoutMs
 	if timeoutMs <= 0 {
 		timeoutMs = defaultQueryTimeoutMs
-	}
-	if timeoutMs < minQueryTimeoutMs {
-		timeoutMs = minQueryTimeoutMs
-	}
-	if timeoutMs > maxQueryTimeoutMs {
-		timeoutMs = maxQueryTimeoutMs
+	} else {
+		if timeoutMs < minQueryTimeoutMs {
+			writeError(w, http.StatusBadRequest, "invalid_timeout", fmt.Sprintf("timeout_ms must be at least %dms", minQueryTimeoutMs))
+			return
+		}
+		if timeoutMs > maxQueryTimeoutMs {
+			writeError(w, http.StatusBadRequest, "invalid_timeout", fmt.Sprintf("timeout_ms must be at most %dms", maxQueryTimeoutMs))
+			return
+		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
