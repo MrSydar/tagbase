@@ -97,6 +97,12 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// httpError reads the response body and returns an error containing both status code and body.
+func httpError(prefix string, resp *http.Response) error {
+	body, _ := io.ReadAll(resp.Body)
+	return fmt.Errorf("%s: status %d: %s", prefix, resp.StatusCode, string(body))
+}
+
 // ListCollections returns all collections.
 func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 	slog.Debug("ListCollections: called")
@@ -111,7 +117,7 @@ func (c *Client) ListCollections(ctx context.Context) ([]Collection, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("list collections: status %d", resp.StatusCode)
+		return nil, httpError("list collections", resp)
 	}
 	var result struct {
 		Collections []Collection `json:"collections"`
@@ -141,7 +147,7 @@ func (c *Client) CreateCollection(ctx context.Context, name, dataType string) (*
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("create collection: status %d", resp.StatusCode)
+		return nil, httpError("create collection", resp)
 	}
 	var coll Collection
 	if err := json.NewDecoder(resp.Body).Decode(&coll); err != nil {
@@ -164,7 +170,7 @@ func (c *Client) GetObjectMetadata(ctx context.Context, collection, id string) (
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch metadata: status %d", resp.StatusCode)
+		return nil, httpError("fetch metadata", resp)
 	}
 	var obj Object
 	if err := json.NewDecoder(resp.Body).Decode(&obj); err != nil {
@@ -187,7 +193,7 @@ func (c *Client) GetObjectData(ctx context.Context, collection, id string) ([]by
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch data: status %d", resp.StatusCode)
+		return nil, httpError("fetch data", resp)
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -210,7 +216,7 @@ func (c *Client) GetObjectTags(ctx context.Context, collection, id string, tags 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch tags: status %d", resp.StatusCode)
+		return nil, httpError("fetch tags", resp)
 	}
 	var result TagResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -238,7 +244,7 @@ func (c *Client) QueryObjects(ctx context.Context, collection string, req TagsQu
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("query objects: status %d", resp.StatusCode)
+		return nil, httpError("query objects", resp)
 	}
 	var result TagsQueryResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -268,7 +274,7 @@ func (c *Client) UploadObject(ctx context.Context, collection, dataType string, 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("upload object: status %d", resp.StatusCode)
+		return nil, httpError("upload object", resp)
 	}
 	var result ObjectUploadResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -291,7 +297,7 @@ func (c *Client) DeleteCollection(ctx context.Context, collection string) error 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("delete collection: status %d", resp.StatusCode)
+		return httpError("delete collection", resp)
 	}
 	return nil
 }
@@ -310,7 +316,7 @@ func (c *Client) DeleteObject(ctx context.Context, collection, id string) error 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("delete object: status %d", resp.StatusCode)
+		return httpError("delete object", resp)
 	}
 	return nil
 }
