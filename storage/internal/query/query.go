@@ -62,14 +62,14 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 	for len(results) < targetLimit {
 		if err := ctx.Err(); err != nil {
 			if req.BestEffort {
-				return buildResponse(results, req.Limit)
+				return buildPartialResponse(results, req.Limit, scanCursorDate, scanCursorID)
 			}
 			return nil, fmt.Errorf("query timeout: %w", err)
 		}
 		candidates, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, scanCursorDate, scanCursorID, batchSize)
 		if err != nil {
 			if req.BestEffort && ctx.Err() != nil {
-				return buildResponse(results, req.Limit)
+				return buildPartialResponse(results, req.Limit, scanCursorDate, scanCursorID)
 			}
 			return nil, fmt.Errorf("scan candidates: %w", err)
 		}
@@ -84,7 +84,7 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 		knownTags, err := r.db.GetKnownTagsForObjects(ctx, candidateIDs)
 		if err != nil {
 			if req.BestEffort && ctx.Err() != nil {
-				return buildResponse(results, req.Limit)
+				return buildPartialResponse(results, req.Limit, scanCursorDate, scanCursorID)
 			}
 			return nil, fmt.Errorf("get known tags: %w", err)
 		}
@@ -95,7 +95,7 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 			}
 			if err := ctx.Err(); err != nil {
 				if req.BestEffort {
-					return buildResponse(results, req.Limit)
+					return buildPartialResponse(results, req.Limit, scanCursorDate, scanCursorID)
 				}
 				return nil, fmt.Errorf("query timeout: %w", err)
 			}
@@ -107,6 +107,10 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 					break
 				}
 			}
+
+			scanCursorDate = cand.Date
+			scanCursorID = cand.ID
+
 			if contradicts {
 				continue
 			}
@@ -122,13 +126,13 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 				resp, err := r.client.Tag(ctx, collection.Name, cand.ID, missing)
 				if err != nil {
 					if req.BestEffort && ctx.Err() != nil {
-						return buildResponse(results, req.Limit)
+						return buildPartialResponse(results, req.Limit, scanCursorDate, scanCursorID)
 					}
 					return nil, fmt.Errorf("tag engine error: %w", err)
 				}
 				if err := r.db.UpsertTags(ctx, collection.ID, cand.ID, resp); err != nil {
 					if req.BestEffort && ctx.Err() != nil {
-						return buildResponse(results, req.Limit)
+						return buildPartialResponse(results, req.Limit, scanCursorDate, scanCursorID)
 					}
 					return nil, fmt.Errorf("persist tags: %w", err)
 				}
@@ -158,10 +162,6 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 			cand.Tags = req.Tags
 			results = append(results, cand)
 		}
-
-		last := candidates[len(candidates)-1]
-		scanCursorDate = last.Date
-		scanCursorID = last.ID
 	}
 
 	return buildResponse(results, req.Limit)
@@ -179,6 +179,20 @@ func buildResponse(results []models.Object, limit int) (*models.TagsQueryRespons
 	if hasMore && len(results) > 0 {
 		last := results[len(results)-1]
 		resp.Next = cursor.Encode(last.Date, last.ID)
+	}
+	return resp, nil
+}
+
+func buildPartialResponse(results []models.Object, limit int, scanCursorDate time.Time, scanCursorID string) (*models.TagsQueryResponse, error) {
+	slog.Debug("buildPartialResponse", "results", len(results), "limit", limit, "scanCursorID", scanCursorID)
+	if len(results) > limit {
+		return buildResponse(results, limit)
+	}
+	resp := &models.TagsQueryResponse{
+		Objects: results,
+	}
+	if scanCursorID != "" {
+		resp.Next = cursor.Encode(scanCursorDate, scanCursorID)
 	}
 	return resp, nil
 }

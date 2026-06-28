@@ -114,7 +114,7 @@ curl -X POST http://localhost:8080/v1/collections/jobs/objects/query \
 - Ordering: `date DESC`, then `id ASC`.
 - Cursor: `base64url(<unix_millis>|<uuid>)` of the last returned object.
 - `timeout_ms`: query timeout in milliseconds. Defaults to `30000` (30s). If reached and `best_effort` is `false`, a `query_timeout` error is returned.
-- `best_effort`: when `true` and the query times out, the server returns whatever objects were found up to that point instead of failing.
+- `best_effort`: when `true` and the query times out, the server returns whatever objects were found up to that point instead of failing. A pagination `next` cursor is included when there may be more objects remaining to scan.
 
 **Get Tags**
 
