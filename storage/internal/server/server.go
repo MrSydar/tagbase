@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -571,9 +572,20 @@ func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.queryRunner.Query(r.Context(), coll, req)
+	timeoutMs := req.TimeoutMs
+	if timeoutMs <= 0 {
+		timeoutMs = 30000
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutMs)*time.Millisecond)
+	defer cancel()
+
+	resp, err := s.queryRunner.Query(ctx, coll, req)
 	if err != nil {
 		slog.Error("query failed", "error", err)
+		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+			writeError(w, http.StatusInternalServerError, "query_timeout", "query timed out")
+			return
+		}
 		if strings.Contains(err.Error(), "tag engine error") || strings.Contains(err.Error(), "tag engine failure") {
 			writeError(w, http.StatusBadGateway, "tag_engine_error", err.Error())
 			return

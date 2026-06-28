@@ -60,6 +60,9 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 
 	slog.Debug("Query: starting batch scan for tags")
 	for len(results) < targetLimit {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("query timeout: %w", err)
+		}
 		candidates, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, scanCursorDate, scanCursorID, batchSize)
 		if err != nil {
 			return nil, fmt.Errorf("scan candidates: %w", err)
@@ -80,6 +83,9 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 		for _, cand := range candidates {
 			if len(results) >= targetLimit {
 				break
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, fmt.Errorf("query timeout: %w", err)
 			}
 			objKnown := knownTags[cand.ID]
 			contradicts := false
