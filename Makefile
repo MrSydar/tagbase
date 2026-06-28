@@ -1,4 +1,4 @@
-.PHONY: all build-client build-storage build-tagger e2e docker-up docker-down help
+.PHONY: all build-client build-storage build-tagger e2e docker-up docker-down fmt help
 
 all: build-client build-storage build-tagger
 
@@ -21,6 +21,11 @@ docker-up:
 docker-down:
 	docker compose down
 
+## Format
+
+fmt:
+	gofmt -w storage/ tagger/
+
 ## Tests
 
 e2e:
@@ -35,3 +40,4 @@ help:
 	@echo "  docker-up      Start the full Docker Compose stack"
 	@echo "  docker-down    Stop the Docker Compose stack"
 	@echo "  e2e            Run end-to-end tests (requires stack running)"
+	@echo "  fmt            Format all Go source files with gofmt"
