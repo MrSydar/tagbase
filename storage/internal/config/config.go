@@ -41,12 +41,12 @@ func Load(prefix string) (*Config, error) {
 		S3SecretKey:            os.Getenv(prefix + "S3_SECRET_KEY"),
 		S3ForcePathStyle:       true,
 		TagEngineURL:           os.Getenv(prefix + "TAG_ENGINE_URL"),
-		TagEngineTimeout:     30 * time.Second,
-		DefaultLimit:         5,
-		MaxLimit:             100,
-		DefaultTTL:           0,
-		MaxTagsPerQuery:      100,
-		MaxObjectSizeBytes:   10 * 1024 * 1024,
+		TagEngineTimeout:       30 * time.Second,
+		DefaultLimit:           5,
+		MaxLimit:               100,
+		DefaultTTL:             0,
+		MaxTagsPerQuery:        100,
+		MaxObjectSizeBytes:     10 * 1024 * 1024,
 		RetentionSweepInterval: 60 * time.Second,
 	}
 

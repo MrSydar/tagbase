@@ -264,7 +264,6 @@ func getTags(ctx context.Context, c *client.Client, args []string) {
 	printJSON(resp)
 }
 
-
 // tagList implements flag.Value to accept multiple --tag flags.
 type tagList []string
 
