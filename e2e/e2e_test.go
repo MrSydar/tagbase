@@ -18,9 +18,11 @@ const storageURL = "http://localhost:8080"
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type tagQueryReq struct {
-	Tags   map[string]bool `json:"tags,omitempty"`
-	Limit  int             `json:"limit"`
-	Cursor string          `json:"cursor,omitempty"`
+	Tags       map[string]bool `json:"tags,omitempty"`
+	Limit      int             `json:"limit"`
+	Cursor     string          `json:"cursor,omitempty"`
+	TimeoutMs  int             `json:"timeout_ms,omitempty"`
+	BestEffort bool            `json:"best_effort,omitempty"`
 }
 
 type tagQueryResp struct {

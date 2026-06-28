@@ -73,7 +73,7 @@ commands:
   get                --collection <c> --id <id>
   data               --collection <c> --id <id> [--out <path>]
   tags               --collection <c> --id <id> [--tags <a,b>]
-  query              --collection <c> [--tags <json>] [--limit <n>] [--cursor <cursor>] [--timeout <ms>]
+  query              --collection <c> [--tags <json>] [--limit <n>] [--cursor <cursor>] [--timeout <ms>] [--best-effort]
   delete             --collection <c> --id <id>
 `)
 }
@@ -259,12 +259,13 @@ func query(ctx context.Context, c *client.Client, args []string) {
 	limit := fs.Int("limit", 100, "result limit")
 	cursor := fs.String("cursor", "", "pagination cursor")
 	timeout := fs.Int("timeout", 30000, "query timeout in milliseconds")
+	bestEffort := fs.Bool("best-effort", false, "return partial results on timeout")
 	fs.Parse(args)
 	if *collection == "" {
 		fs.Usage()
 		os.Exit(1)
 	}
-	req := client.TagsQueryRequest{Limit: *limit, Cursor: *cursor, TimeoutMs: *timeout}
+	req := client.TagsQueryRequest{Limit: *limit, Cursor: *cursor, TimeoutMs: *timeout, BestEffort: *bestEffort}
 	if *tagsJson != "" {
 		if err := json.Unmarshal([]byte(*tagsJson), &req.Tags); err != nil {
 			fmt.Fprintf(os.Stderr, "error parsing tags JSON: %v\n", err)

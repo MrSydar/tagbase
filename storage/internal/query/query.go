@@ -61,10 +61,16 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 	slog.Debug("Query: starting batch scan for tags")
 	for len(results) < targetLimit {
 		if err := ctx.Err(); err != nil {
+			if req.BestEffort {
+				return buildResponse(results, req.Limit)
+			}
 			return nil, fmt.Errorf("query timeout: %w", err)
 		}
 		candidates, err := r.db.ScanCandidateObjects(ctx, collection.ID, req.Date, scanCursorDate, scanCursorID, batchSize)
 		if err != nil {
+			if req.BestEffort && ctx.Err() != nil {
+				return buildResponse(results, req.Limit)
+			}
 			return nil, fmt.Errorf("scan candidates: %w", err)
 		}
 		if len(candidates) == 0 {
@@ -77,6 +83,9 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 		}
 		knownTags, err := r.db.GetKnownTagsForObjects(ctx, candidateIDs)
 		if err != nil {
+			if req.BestEffort && ctx.Err() != nil {
+				return buildResponse(results, req.Limit)
+			}
 			return nil, fmt.Errorf("get known tags: %w", err)
 		}
 
@@ -85,6 +94,9 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 				break
 			}
 			if err := ctx.Err(); err != nil {
+				if req.BestEffort {
+					return buildResponse(results, req.Limit)
+				}
 				return nil, fmt.Errorf("query timeout: %w", err)
 			}
 			objKnown := knownTags[cand.ID]
@@ -109,9 +121,15 @@ func (r *Runner) Query(ctx context.Context, collection *models.Collection, req m
 				// Call tagging engine.
 				resp, err := r.client.Tag(ctx, collection.Name, cand.ID, missing)
 				if err != nil {
+					if req.BestEffort && ctx.Err() != nil {
+						return buildResponse(results, req.Limit)
+					}
 					return nil, fmt.Errorf("tag engine error: %w", err)
 				}
 				if err := r.db.UpsertTags(ctx, collection.ID, cand.ID, resp); err != nil {
+					if req.BestEffort && ctx.Err() != nil {
+						return buildResponse(results, req.Limit)
+					}
 					return nil, fmt.Errorf("persist tags: %w", err)
 				}
 				if objKnown == nil {

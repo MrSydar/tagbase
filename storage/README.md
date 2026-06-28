@@ -95,7 +95,9 @@ curl -X POST http://localhost:8080/v1/collections/jobs/objects/query \
     "tags": {"golang": true, "qa": false},
     "date": {"gte": "2026-01-01T00:00:00Z", "lt": "2027-01-01T00:00:00Z"},
     "limit": 5,
-    "cursor": "..."
+    "cursor": "...",
+    "timeout_ms": 30000,
+    "best_effort": false
   }'
 ```
 
@@ -111,6 +113,8 @@ curl -X POST http://localhost:8080/v1/collections/jobs/objects/query \
 - Missing tags are evaluated on-demand via the tagging engine.
 - Ordering: `date DESC`, then `id ASC`.
 - Cursor: `base64url(<unix_millis>|<uuid>)` of the last returned object.
+- `timeout_ms`: query timeout in milliseconds. Defaults to `30000` (30s). If reached and `best_effort` is `false`, a `query_timeout` error is returned.
+- `best_effort`: when `true` and the query times out, the server returns whatever objects were found up to that point instead of failing.
 
 **Get Tags**
 
@@ -200,7 +204,8 @@ client --url http://localhost:8080 upload --collection jobs --data-type txt --fi
 client --url http://localhost:8080 get --collection jobs --id <id>
 client --url http://localhost:8080 data --collection jobs --id <id> --out hello.txt
 client --url http://localhost:8080 tags --collection jobs --id <id> --tags golang,qa
-client --url http://localhost:8080 query --collection jobs --tags '{"golang":true}' --limit 5
+client --url http://localhost:8080 query --collection jobs --tags '{"golang":true}' --limit 5 --timeout 30000
+client --url http://localhost:8080 query --collection jobs --tags '{"golang":true}' --limit 5 --best-effort
 client --url http://localhost:8080 delete --collection jobs --id <id>
 ```
 

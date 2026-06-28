@@ -59,11 +59,12 @@ type ObjectUploadResponse struct {
 
 // TagsQueryRequest is the request for querying objects by tags.
 type TagsQueryRequest struct {
-	Tags      map[string]bool `json:"tags,omitempty"`
-	Date      *DateFilter     `json:"date,omitempty"`
-	Limit     int             `json:"limit"`
-	Cursor    string          `json:"cursor,omitempty"`
-	TimeoutMs int             `json:"timeout_ms,omitempty"`
+	Tags       map[string]bool `json:"tags,omitempty"`
+	Date       *DateFilter     `json:"date,omitempty"`
+	Limit      int             `json:"limit"`
+	Cursor     string          `json:"cursor,omitempty"`
+	TimeoutMs  int             `json:"timeout_ms,omitempty"`
+	BestEffort bool            `json:"best_effort,omitempty"`
 }
 
 // DateFilter defines date constraints.
