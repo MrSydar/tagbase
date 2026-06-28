@@ -1,24 +1,26 @@
 # AGENTS.md
 
-Tagbase is a Go monorepo with two workspace modules. It is simpler than it looks — the key is remembering that both modules exist and one imports the other.
+Tagbase is a Go monorepo with two workspace modules. The key mental model: both modules exist, and `tagger` imports `storage/pkg/client` resolved by the workspace, not by `go.mod`.
 
 ## Monorepo layout
 
 - Root uses `go.work` with Go 1.26.4.
 - Modules: `storage/` (`mrsydar/tagbase/storage`) and `tagger/` (`mrsydar/tagbase/tagger`).
-- Cross-module dependency: `tagger` imports `storage/pkg/client`.
-  - Docker builds always copy both modules.
-  - Building locally from a module directory works because Go workspace resolves the sibling module.
+- Cross-module dependency: `tagger` imports `mrsydar/tagbase/storage/pkg/client`.
+  - `tagger/go.mod` **does not** list `storage` as a dependency; the Go workspace resolves the sibling module locally.
+  - Docker builds always copy both modules so the workspace is functional inside the builder.
+  - Building locally from a module directory works because Go workspace resolves the sibling module automatically.
 
 ## Running the full stack
 
 ```bash
 make docker-up
-# or: docker compose up --build
+# or: docker compose up --build -d
 ```
 
 - Postgres (`:5432`), MinIO (`:9000`, `:9001`), tagger (`:8081`), and storage (`:8080`) all come up.
 - Both services expose Prometheus metrics at `GET /metrics`.
+- `compose.yaml` mounts `.env` into the tagger service. By default `.env` sets `TAGGER_EVALUATOR_IMPL=openai` (requires a valid API key). Running tagger standalone without `.env` defaults to `false` (all tags evaluate to `false`).
 - Storage waits for tagger to be healthy before starting (`depends_on` with `condition: service_healthy`).
 - Storage fails fast on startup if it cannot fetch supported types from tagger.
 - Wait for healthy; then test via `README.md` Quick Start curl commands.
@@ -74,7 +76,8 @@ make e2e
 # or: cd e2e && GOWORK=off go test -v -count=1 .
 ```
 
-Requires the Docker Compose stack running and `storage` readyz returning `200`.
+- `GOWORK=off` is required because the root `go.work` file would otherwise be picked up from the parent directory, interfering with the e2e module.
+- Requires the Docker Compose stack running and `storage` readyz returning `200`.
 
 ## Important quirks
 
@@ -85,11 +88,9 @@ Requires the Docker Compose stack running and `storage` readyz returning `200`.
 - **Prometheus metrics:** Both services expose metrics at `GET /metrics` via `github.com/prometheus/client_golang`.
   - Storage metrics: `storage_requests_total`, `storage_errors_total`, `storage_tagger_latency_seconds`.
   - Tagger metrics: `tagger_requests_total`, `tagger_errors_total`, `tagger_evaluator_latency_seconds`.
-- **Makefile available:** A root `Makefile` provides shortcuts for building, running Docker, and executing e2e tests. No CI or task runner setup yet.
 
 ## References
 
 - `README.md` — architecture, API shapes, quick start curls
-
 - `storage/README.md` — env vars, CLI client usage, internal structure
 - `tagger/README.md` — tag evaluation logic, env vars
