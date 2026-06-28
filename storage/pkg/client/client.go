@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -205,8 +206,16 @@ func (c *Client) GetObjectData(ctx context.Context, collection, id string) ([]by
 // GetObjectTags fetches tags for an object.
 func (c *Client) GetObjectTags(ctx context.Context, collection, id string, tags []string) (*TagResponse, error) {
 	slog.Debug("GetObjectTags", "collection", collection, "id", id, "tags", tags)
-	url := fmt.Sprintf("%s/v1/collections/%s/objects/%s/tags?tags=%s", c.baseURL, collection, id, strings.Join(tags, ","))
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	tagsParam := strings.Join(tags, ",")
+	reqURL := fmt.Sprintf("%s/v1/collections/%s/objects/%s/tags", c.baseURL, collection, id)
+	u, parseErr := url.Parse(reqURL)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	q := u.Query()
+	q.Set("tags", tagsParam)
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
