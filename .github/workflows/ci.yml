@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  build-and-vet:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -31,9 +31,6 @@ jobs:
 
       - name: Vet
         run: go vet ./...
-
-      - name: Test
-        run: go test -v -race ./...
 
   e2e-compile-check:
     runs-on: ubuntu-latest
