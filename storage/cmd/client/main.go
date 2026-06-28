@@ -82,9 +82,10 @@ commands:
                      Get or evaluate tags for an object.
                      Without --tags, returns all tags for the object.
                      With --tags, evaluates only the given tag names.
-  query              --collection <c> [--tags <json>] [--limit <n>] [--cursor <cursor>] [--timeout <ms>] [--best-effort]
+  query              --collection <c> [--tag <name=value>] [--tag <name=value>] [--limit <n>] [--cursor <cursor>] [--timeout <ms>] [--best-effort]
                      Query objects in a collection by tag criteria.
-                     --tags must be a JSON object mapping tag names to true/false booleans.
+                     Use --tag multiple times: --tag \"working with kids=true\" --tag golang=false
+                     If no =value is given, the tag defaults to true.
   delete             --collection <c> --id <id>
                      Delete an object.
 `)
@@ -263,11 +264,48 @@ func getTags(ctx context.Context, c *client.Client, args []string) {
 	printJSON(resp)
 }
 
+
+// tagList implements flag.Value to accept multiple --tag flags.
+type tagList []string
+
+func (t *tagList) String() string { return strings.Join(*t, ",") }
+func (t *tagList) Set(v string) error {
+	*t = append(*t, v)
+	return nil
+}
+
+// parseTagValue converts "name=value" into a map entry.
+// If no "=" is present, the tag defaults to true.
+func parseTagValue(s string) (string, bool, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false, fmt.Errorf("tag cannot be empty")
+	}
+	parts := strings.SplitN(s, "=", 2)
+	name := strings.TrimSpace(parts[0])
+	if name == "" {
+		return "", false, fmt.Errorf("tag name cannot be empty")
+	}
+	if len(parts) == 1 {
+		return name, true, nil
+	}
+	val := strings.TrimSpace(parts[1])
+	switch strings.ToLower(val) {
+	case "true":
+		return name, true, nil
+	case "false":
+		return name, false, nil
+	default:
+		return "", false, fmt.Errorf("invalid tag value %q: must be true or false", val)
+	}
+}
+
 func query(ctx context.Context, c *client.Client, args []string) {
 	slog.Debug("query called")
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	collection := fs.String("collection", "", "collection name")
-	tagsJson := fs.String("tags", "", "JSON object of tag:true/false")
+	var tags tagList
+	fs.Var(&tags, "tag", "tag filter in 'name=value' format (can be used multiple times, e.g. --tag \"working with kids=true\" --tag golang=false)")
 	limit := fs.Int("limit", 100, "result limit")
 	cursor := fs.String("cursor", "", "pagination cursor")
 	timeout := fs.Int("timeout", 30000, "query timeout in milliseconds")
@@ -278,10 +316,15 @@ func query(ctx context.Context, c *client.Client, args []string) {
 		os.Exit(1)
 	}
 	req := client.TagsQueryRequest{Limit: *limit, Cursor: *cursor, TimeoutMs: *timeout, BestEffort: *bestEffort}
-	if *tagsJson != "" {
-		if err := json.Unmarshal([]byte(*tagsJson), &req.Tags); err != nil {
-			fmt.Fprintf(os.Stderr, "error parsing tags JSON: %v\n", err)
-			os.Exit(1)
+	if len(tags) > 0 {
+		req.Tags = make(map[string]bool)
+		for _, t := range tags {
+			name, val, err := parseTagValue(t)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error parsing tag %q: %v\n", t, err)
+				os.Exit(1)
+			}
+			req.Tags[name] = val
 		}
 	}
 	resp, err := c.QueryObjects(ctx, *collection, req)
