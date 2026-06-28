@@ -66,15 +66,27 @@ func usage() {
 	fmt.Fprintf(os.Stderr, `usage: client --url <service-url> <command> [options]
 
 commands:
-  list-collections
+  list-collections   List all collections.
   create-collection  --name <name> --data-type <type>
+                     Create a new collection with the given name and data type.
   delete-collection  --collection <c>
+                     Delete a collection and all its objects.
   upload             --collection <c> --data-type <type> --file <path> [--date <RFC3339>] [--ttl <seconds>]
+                     Upload an object to a collection.
+                     Use --file - to read from stdin.
   get                --collection <c> --id <id>
+                     Get object metadata.
   data               --collection <c> --id <id> [--out <path>]
+                     Download object data. Default output is stdout, use --out <path> to save to a file.
   tags               --collection <c> --id <id> [--tags <a,b>]
+                     Get or evaluate tags for an object.
+                     Without --tags, returns all tags for the object.
+                     With --tags, evaluates only the given tag names.
   query              --collection <c> [--tags <json>] [--limit <n>] [--cursor <cursor>] [--timeout <ms>] [--best-effort]
+                     Query objects in a collection by tag criteria.
+                     --tags must be a JSON object mapping tag names to true/false booleans.
   delete             --collection <c> --id <id>
+                     Delete an object.
 `)
 }
 
