@@ -61,18 +61,28 @@ curl -s -X POST "http://localhost:8080/v1/collections/jobs/objects?data_type=txt
   -H "Content-Type: application/octet-stream" \
   -d 'hello golang qa'
 
-# 3. Query objects by tags
+# 3. Query objects by tags (default timeout 30s)
 curl -s -X POST http://localhost:8080/v1/collections/jobs/objects/query \
   -H "Content-Type: application/json" \
-  -d '{"tags":{"golang":true},"limit":5}'
+  -d '{"tags":{"golang":true},"limit":5,"timeout_ms":30000}'
 
-# 4. Inspect object tags directly
+# 4. Best-effort query: returns partial results instead of error on timeout
+curl -s -X POST http://localhost:8080/v1/collections/jobs/objects/query \
+  -H "Content-Type: application/json" \
+  -d '{"tags":{"golang":true},"limit":5,"timeout_ms":1000,"best_effort":true}'
+
+# 5. Inspect object tags directly
 curl -s "http://localhost:8080/v1/collections/jobs/objects/{id}/tags?tags=golang,qa"
 
-# 5. Check Prometheus metrics
+# 6. Check Prometheus metrics
 curl -s http://localhost:8080/metrics | grep storage_
 curl -s http://localhost:8081/metrics | grep tagger_
 ```
+
+**Query parameters** (see [`storage/README.md`](storage/) for full API docs):
+
+- `timeout_ms` — query timeout. Default `30000` (30 seconds). If exceeded and `best_effort` is `false`, a `query_timeout` error is returned.
+- `best_effort` — when `true`, a timed-out query returns whatever matched objects were found instead of failing. A `next` pagination cursor is included so the client can resume scanning.
 
 ---
 
