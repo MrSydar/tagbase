@@ -44,9 +44,11 @@ jobs:
 
       - name: Verify e2e module compiles
         working-directory: e2e
+        env:
+          GOWORK: off
         run: |
           go mod download
-          go build -o /dev/null .
+          go test -count=0 ./...
 
   lint:
     runs-on: ubuntu-latest
