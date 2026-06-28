@@ -531,6 +531,12 @@ func (s *Server) getObjectTags(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const (
+	minQueryTimeoutMs     = 1000   // 1s
+	maxQueryTimeoutMs     = 300000 // 5m
+	defaultQueryTimeoutMs = 30000  // 30s
+)
+
 func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("queryObjects handler called")
 	collectionName := chi.URLParam(r, "collection")
@@ -574,7 +580,13 @@ func (s *Server) queryObjects(w http.ResponseWriter, r *http.Request) {
 
 	timeoutMs := req.TimeoutMs
 	if timeoutMs <= 0 {
-		timeoutMs = 30000
+		timeoutMs = defaultQueryTimeoutMs
+	}
+	if timeoutMs < minQueryTimeoutMs {
+		timeoutMs = minQueryTimeoutMs
+	}
+	if timeoutMs > maxQueryTimeoutMs {
+		timeoutMs = maxQueryTimeoutMs
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
