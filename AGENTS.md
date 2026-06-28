@@ -89,6 +89,10 @@ make e2e
   - Storage metrics: `storage_requests_total`, `storage_errors_total`, `storage_tagger_latency_seconds`.
   - Tagger metrics: `tagger_requests_total`, `tagger_errors_total`, `tagger_evaluator_latency_seconds`.
 
+## Git workflow
+
+- **Always create a new branch when working on a feature.** Do not commit directly to the default branch (`main`).
+
 ## References
 
 - `README.md` — architecture, API shapes, quick start curls
